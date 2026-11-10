@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   CheckCircle2, 
   TrendingDown, 
@@ -57,6 +57,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
   const topOpportunities = getTopSavingsOpportunities(rows, 5);
   const nsDistribution = computeNamespaceDistribution(rows).slice(0, 5);
+  const workloadNsCount = useMemo(() => new Set(rows.map((r) => r.ns)).size, [rows]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -417,7 +418,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
 
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>Analyzed across {namespaces.length} total Kubernetes namespaces</span>
+            <span>
+              Analyzed across {workloadNsCount} active namespaces ({namespaces.length} total in cluster)
+            </span>
             <button
               onClick={onNavigateToNamespaces}
               className="text-blue-600 hover:text-blue-800 font-semibold flex items-center space-x-1"

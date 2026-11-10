@@ -21,6 +21,7 @@ interface SidebarProps {
   clusterStatus: ClusterStatus | null;
   workloadCount: number;
   namespaceCount: number;
+  activeNamespaceCount?: number;
   scanCount: number;
   isScanning: boolean;
   scanElapsed: number;
@@ -34,6 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   clusterStatus,
   workloadCount,
   namespaceCount,
+  activeNamespaceCount,
   scanCount,
   isScanning,
   scanElapsed,
@@ -45,30 +47,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Overview',
       icon: LayoutDashboard,
       badge: null,
+      tooltip: 'Executive Overview',
     },
     {
       id: 'workloads' as ViewTab,
       label: 'Workloads',
       icon: Layers,
       badge: workloadCount > 0 ? workloadCount : null,
+      tooltip: `${workloadCount} analyzed container workloads`,
     },
     {
       id: 'namespaces' as ViewTab,
       label: 'Namespaces',
       icon: FolderTree,
       badge: namespaceCount > 0 ? namespaceCount : null,
+      tooltip:
+        activeNamespaceCount !== undefined && activeNamespaceCount > 0
+          ? `${namespaceCount} Cluster Namespaces (${activeNamespaceCount} with analyzed workloads)`
+          : `${namespaceCount} cluster namespaces`,
     },
     {
       id: 'history' as ViewTab,
       label: 'Scan History',
       icon: History,
       badge: scanCount > 0 ? scanCount : null,
+      tooltip: `${scanCount} historical scan reports`,
     },
     {
       id: 'settings' as ViewTab,
       label: 'Settings & Status',
       icon: Settings,
       badge: null,
+      tooltip: 'Cluster Engine & Settings',
     },
   ];
 
@@ -122,7 +132,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   ? 'bg-blue-50 text-blue-700 font-semibold'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
-              title={!isOpen ? item.label : undefined}
+              title={item.tooltip || (!isOpen ? item.label : undefined)}
             >
               <div className="flex items-center space-x-2.5 min-w-0">
                 <Icon
@@ -135,6 +145,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {isOpen && item.badge !== null && (
                 <span
+                  title={item.tooltip}
                   className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                     isActive
                       ? 'bg-blue-100 text-blue-800'

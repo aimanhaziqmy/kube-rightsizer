@@ -282,8 +282,18 @@ class ScanEngine:
             for ns in p.get("namespaces", []):
                 argv += ["-n", ns]
         else:
-            logger.warning("KRR executable not detected; running in mock generation mode")
-            use_mock = True
+            allow_mock = (
+                os.environ.get("ALLOW_MOCK_SCAN", "").lower() in ("true", "1")
+                or os.environ.get("PYTEST_CURRENT_TEST") is not None
+            )
+            if allow_mock:
+                logger.warning("KRR executable not detected; running in mock generation mode for automated tests")
+                use_mock = True
+            else:
+                raise RuntimeError(
+                    "Robusta KRR executable not found (neither /app/krr.py nor 'krr' in PATH). "
+                    "Mock scan generation is disabled in production to guarantee real cluster data."
+                )
 
         try:
             if use_mock:
@@ -361,7 +371,13 @@ class ScanEngine:
             raise RuntimeError(f"KRR exited with code {proc.returncode}: {last_lines}")
 
     def _run_mock_scan(self, meta: Dict[str, Any], out_raw: str):
-        """Simulate realistic scan for dev / local testing when krr isn't installed."""
+        """Simulate realistic scan for automated test suite when krr isn't installed in the test harness."""
+        allow_mock = (
+            os.environ.get("ALLOW_MOCK_SCAN", "").lower() in ("true", "1")
+            or os.environ.get("PYTEST_CURRENT_TEST") is not None
+        )
+        if not allow_mock:
+            raise RuntimeError("Mock scan generation is strictly disabled in production environments.")
         stages = [
             "Initializing kube-rightsizer engine...",
             f"Querying Prometheus at {PROM_URL}...",

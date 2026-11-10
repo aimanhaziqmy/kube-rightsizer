@@ -175,8 +175,8 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({ rows, score }) => 
           </div>
           <div className="flex justify-between items-center text-slate-500">
             <span>Pods / Namespaces:</span>
-            <span className="font-semibold text-slate-700">
-              {totals.podCount} pods · {totals.namespaceCount} ns
+            <span className="font-semibold text-slate-700" title={`${totals.namespaceCount} namespaces with analyzed workloads`}>
+              {totals.podCount} pods · {totals.namespaceCount} ns with workloads
             </span>
           </div>
         </div>

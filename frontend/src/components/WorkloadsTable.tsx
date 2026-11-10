@@ -21,6 +21,7 @@ import { exportToCsv, exportToJson } from '../utils/exportUtils';
 
 interface WorkloadsTableProps {
   rows: WorkloadRow[];
+  clusterNamespaces?: string[];
   globalSearch?: string;
   selectedNamespace?: string;
   selectedSeverity?: string;
@@ -31,6 +32,7 @@ interface WorkloadsTableProps {
 
 export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
   rows,
+  clusterNamespaces = [],
   globalSearch = '',
   selectedNamespace = 'ALL',
   selectedSeverity = 'ALL',
@@ -100,6 +102,13 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
     const set = new Set(rows.map((r) => r.ns || 'default'));
     return Array.from(set).sort();
   }, [rows]);
+
+  const emptyClusterNamespaces = useMemo(() => {
+    const workloadNsSet = new Set(rows.map((r) => r.ns || 'default'));
+    return (clusterNamespaces || [])
+      .filter((ns) => !workloadNsSet.has(ns))
+      .sort();
+  }, [rows, clusterNamespaces]);
 
   const availableKinds = useMemo(() => {
     const set = new Set(rows.map((r) => r.kind || 'Deployment'));
@@ -430,12 +439,33 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
             }}
             className="appearance-none bg-white border border-slate-200 hover:border-slate-300 rounded-lg pl-3 pr-8 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer transition shadow-2xs"
           >
-            <option value="ALL">All namespaces ({availableNamespaces.length})</option>
-            {availableNamespaces.map((ns) => (
-              <option key={ns} value={ns}>
-                {ns}
-              </option>
-            ))}
+            <option value="ALL">
+              All namespaces with workloads ({availableNamespaces.length})
+            </option>
+            {emptyClusterNamespaces.length > 0 ? (
+              <>
+                <optgroup label={`Namespaces with Workloads (${availableNamespaces.length})`}>
+                  {availableNamespaces.map((ns) => (
+                    <option key={ns} value={ns}>
+                      {ns}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label={`Other Cluster Namespaces (${emptyClusterNamespaces.length})`}>
+                  {emptyClusterNamespaces.map((ns) => (
+                    <option key={ns} value={ns}>
+                      {ns} (0 workloads)
+                    </option>
+                  ))}
+                </optgroup>
+              </>
+            ) : (
+              availableNamespaces.map((ns) => (
+                <option key={ns} value={ns}>
+                  {ns}
+                </option>
+              ))
+            )}
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
@@ -576,8 +606,27 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                 <td colSpan={11} className="text-center py-14 text-slate-500">
                   <div className="flex flex-col items-center justify-center space-y-2">
                     <Info className="w-6 h-6 text-slate-400" />
-                    <p className="text-sm font-semibold text-slate-700">No matching containers found</p>
-                    <p className="text-xs text-slate-400">Try adjusting your filters or search terms.</p>
+                    {filterNs !== 'ALL' && emptyClusterNamespaces.includes(filterNs) ? (
+                      <>
+                        <p className="text-sm font-semibold text-slate-700">
+                          No workloads found in namespace "{filterNs}"
+                        </p>
+                        <p className="text-xs text-slate-400 max-w-md">
+                          This cluster namespace exists in Kubernetes, but has no running Deployments, StatefulSets, or DaemonSets analyzed by KRR.
+                        </p>
+                        <button
+                          onClick={() => setFilterNs('ALL')}
+                          className="mt-2 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-medium transition"
+                        >
+                          Show all namespaces with workloads
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-slate-700">No matching containers found</p>
+                        <p className="text-xs text-slate-400">Try adjusting your filters or search terms.</p>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>

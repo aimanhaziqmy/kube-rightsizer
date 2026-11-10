@@ -9,15 +9,17 @@ import {
   Layers, 
   CheckCircle2, 
   Info,
-  Clock
+  Clock,
+  FolderTree
 } from 'lucide-react';
 import { ClusterStatus } from '../types';
 
 interface SettingsViewProps {
   clusterStatus: ClusterStatus | null;
+  activeNamespacesCount?: number;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ clusterStatus }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ clusterStatus, activeNamespacesCount }) => {
   return (
     <div className="w-full space-y-6 mb-8">
       <div>
@@ -63,8 +65,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ clusterStatus }) => 
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80">
             <span className="text-slate-400 font-medium block mb-1">Discovered Namespaces</span>
             <div className="font-semibold text-slate-800">
-              {clusterStatus?.namespaces_count ?? 0} active namespaces
+              {clusterStatus?.namespaces_count ?? 0} Discovered Namespaces
             </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {activeNamespacesCount !== undefined && activeNamespacesCount > 0
+                ? `${activeNamespacesCount} with analyzed workloads · ${(clusterStatus?.namespaces_count ?? 0) - activeNamespacesCount} system/empty namespaces`
+                : 'Discovered via Kubernetes Core API core_v1.list_namespace()'}
+            </p>
           </div>
 
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80">
@@ -73,6 +80,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ clusterStatus }) => 
               {clusterStatus?.total_scans ?? 0} archived (auto-pruned after 30 scans)
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Cluster Namespaces & Scope Architecture Note */}
+      <div className="soft-card p-5 space-y-3">
+        <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-100">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <FolderTree className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">Cluster Namespace Architecture</h3>
+            <p className="text-xs text-slate-500">How discovered namespaces map to rightsizing recommendations</p>
+          </div>
+        </div>
+        <div className="text-xs text-slate-600 space-y-2 leading-relaxed">
+          <p>
+            • <strong>Discovered Namespaces ({clusterStatus?.namespaces_count ?? 0}):</strong> The backend queries the Kubernetes Core API (<code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700">core_v1.list_namespace()</code>) to discover every real namespace in your cluster (including Rancher, Fleet, cert-manager, and system namespaces).
+          </p>
+          <p>
+            • <strong>Namespaces with Analyzed Workloads ({activeNamespacesCount ?? 0}):</strong> Robusta KRR scans running Deployments, StatefulSets, and DaemonSets. Namespaces that only host custom resource definitions, static pods, or zero workloads appear in the Namespaces breakdown with 0 container allocations.
+          </p>
+          <p>
+            • <strong>Production Guarantee:</strong> All scan results, namespaces, and resource metrics are queried live from your cluster and Prometheus. Zero synthetic, mock, or fake data is ever returned.
+          </p>
         </div>
       </div>
 

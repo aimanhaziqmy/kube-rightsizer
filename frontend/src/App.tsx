@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   fetchStatus, 
   fetchNamespaces, 
@@ -296,6 +296,12 @@ export const App: React.FC = () => {
     setCurrentTab('workloads');
   };
 
+  // Active workload namespaces count
+  const activeNamespacesCount = useMemo(() => {
+    if (!activeScan?.rows || activeScan.rows.length === 0) return 0;
+    return new Set(activeScan.rows.map((r) => r.ns)).size;
+  }, [activeScan]);
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col antialiased">
       {/* Top Navbar */}
@@ -323,6 +329,7 @@ export const App: React.FC = () => {
           clusterStatus={clusterStatus}
           workloadCount={activeScan?.rows?.length ?? 0}
           namespaceCount={namespaces.length}
+          activeNamespaceCount={activeNamespacesCount}
           scanCount={scans.length}
           isScanning={isScanning}
           scanElapsed={scanElapsed}
@@ -493,6 +500,7 @@ export const App: React.FC = () => {
             <div className="space-y-4 animate-fade-in">
               <WorkloadsTable
                 rows={activeScan.rows || []}
+                clusterNamespaces={namespaces}
                 globalSearch={globalSearch}
                 selectedNamespace={tableNamespaceFilter}
                 selectedSeverity={tableSeverityFilter}
@@ -513,6 +521,7 @@ export const App: React.FC = () => {
           {currentTab === 'namespaces' && (
             <NamespacesView
               rows={activeScan?.rows || []}
+              clusterNamespaces={namespaces}
               onSelectNamespace={handleSelectNamespaceFromSummary}
             />
           )}
@@ -529,7 +538,10 @@ export const App: React.FC = () => {
 
           {/* TAB 5: SETTINGS & STATUS PAGE */}
           {currentTab === 'settings' && (
-            <SettingsView clusterStatus={clusterStatus} />
+            <SettingsView
+              clusterStatus={clusterStatus}
+              activeNamespacesCount={activeNamespacesCount}
+            />
           )}
         </main>
       </div>

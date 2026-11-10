@@ -178,3 +178,27 @@ def test_basic_auth_protection(monkeypatch, tmp_path):
         good_auth = base64.b64encode(b"admin:secret123").decode()
         res_good = client.get("/api/scans", headers={"Authorization": f"Basic {good_auth}"})
         assert res_good.status_code == 200
+
+
+def test_production_mock_scan_strictly_forbidden(monkeypatch, tmp_path):
+    """Ensure in production mode (no PYTEST_CURRENT_TEST or ALLOW_MOCK_SCAN), mock scan is rejected."""
+    from backend.engine import engine
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setenv("ALLOW_MOCK_SCAN", "false")
+
+    out_file = str(tmp_path / "scan.raw")
+    meta = {"id": "test-prod-forbid", "params": {}}
+    with pytest.raises(RuntimeError, match="disabled in production"):
+        engine._run_mock_scan(meta, out_file)
+
+
+def test_production_namespaces_no_synthetic_data(monkeypatch):
+    """Ensure in production mode when k8s API is unavailable, no synthetic namespaces are returned."""
+    from backend import k8s
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setenv("ALLOW_MOCK_NAMESPACES", "false")
+    monkeypatch.setattr(k8s, "_cached_namespaces", None)
+    monkeypatch.setattr(k8s, "_core_api", None)
+
+    ns = k8s.list_cluster_namespaces()
+    assert ns == []
