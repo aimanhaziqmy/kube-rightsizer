@@ -13,6 +13,7 @@ interface NamespacesViewProps {
 interface NamespaceSummary {
   ns: string;
   workloadCount: number;
+  containerCount: number;
   podCount: number;
   cpuSave: number;
   cpuNeed: number;
@@ -34,6 +35,7 @@ export const NamespacesView: React.FC<NamespacesViewProps> = ({
 
   const allSummaries = useMemo(() => {
     const map = new Map<string, NamespaceSummary>();
+    const workloadSets = new Map<string, Set<string>>();
 
     // 1. Seed discovered cluster namespaces from Kubernetes core API
     if (clusterNamespaces && clusterNamespaces.length > 0) {
@@ -41,6 +43,7 @@ export const NamespacesView: React.FC<NamespacesViewProps> = ({
         map.set(ns, {
           ns,
           workloadCount: 0,
+          containerCount: 0,
           podCount: 0,
           cpuSave: 0,
           cpuNeed: 0,
@@ -49,6 +52,7 @@ export const NamespacesView: React.FC<NamespacesViewProps> = ({
           criticalCount: 0,
           hasWorkloads: false,
         });
+        workloadSets.set(ns, new Set());
       }
     }
 
@@ -58,6 +62,7 @@ export const NamespacesView: React.FC<NamespacesViewProps> = ({
         map.set(r.ns, {
           ns: r.ns,
           workloadCount: 0,
+          containerCount: 0,
           podCount: 0,
           cpuSave: 0,
           cpuNeed: 0,
@@ -66,11 +71,20 @@ export const NamespacesView: React.FC<NamespacesViewProps> = ({
           criticalCount: 0,
           hasWorkloads: false,
         });
+        workloadSets.set(r.ns, new Set());
       }
       const s = map.get(r.ns)!;
-      s.workloadCount += 1;
-      s.podCount += r.pods || 1;
+      const wlSet = workloadSets.get(r.ns)!;
+      const wlKey = `${r.kind}/${r.name}`;
+
+      s.containerCount += 1;
       s.hasWorkloads = true;
+
+      if (!wlSet.has(wlKey)) {
+        wlSet.add(wlKey);
+        s.workloadCount += 1;
+        s.podCount += Math.max(r.pods || 1, 1);
+      }
 
       const dCpu = calculateDelta(r, 'req_cpu');
       const dMem = calculateDelta(r, 'req_mem');
@@ -232,7 +246,7 @@ export const NamespacesView: React.FC<NamespacesViewProps> = ({
                       <h3 className="text-sm font-bold text-slate-800 break-all">{s.ns}</h3>
                       <span className="text-[11px] text-slate-400">
                         {s.hasWorkloads
-                          ? `${s.workloadCount} containers · ${s.podCount} total pods`
+                          ? `${s.workloadCount} workloads (${s.containerCount} containers) · ${s.podCount} pods`
                           : '0 workloads analyzed'}
                       </span>
                     </div>

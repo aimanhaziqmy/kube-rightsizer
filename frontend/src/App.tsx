@@ -506,6 +506,7 @@ export const App: React.FC = () => {
                 selectedSeverity={tableSeverityFilter}
                 selectedCategory={tableCategoryFilter}
                 savingsOnly={tableSavingsOnly}
+                onSelectNamespace={setTableNamespaceFilter}
                 onClearFilters={() => {
                   setGlobalSearch('');
                   setTableNamespaceFilter('ALL');

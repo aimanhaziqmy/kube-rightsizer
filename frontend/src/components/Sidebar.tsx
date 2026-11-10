@@ -60,7 +60,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'namespaces' as ViewTab,
       label: 'Namespaces',
       icon: FolderTree,
-      badge: namespaceCount > 0 ? namespaceCount : null,
+      badge:
+        namespaceCount > 0
+          ? activeNamespaceCount !== undefined && activeNamespaceCount > 0 && activeNamespaceCount !== namespaceCount
+            ? `${activeNamespaceCount} / ${namespaceCount}`
+            : namespaceCount
+          : null,
       tooltip:
         activeNamespaceCount !== undefined && activeNamespaceCount > 0
           ? `${namespaceCount} Cluster Namespaces (${activeNamespaceCount} with analyzed workloads)`

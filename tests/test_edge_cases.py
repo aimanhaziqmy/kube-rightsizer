@@ -199,6 +199,23 @@ def test_production_namespaces_no_synthetic_data(monkeypatch):
     monkeypatch.setenv("ALLOW_MOCK_NAMESPACES", "false")
     monkeypatch.setattr(k8s, "_cached_namespaces", None)
     monkeypatch.setattr(k8s, "_core_api", None)
+    monkeypatch.setattr(k8s, "_init_core_api", lambda: None)
+
+    ns = k8s.list_cluster_namespaces()
+    assert ns == []
+
+
+def test_real_k8s_empty_namespaces_does_not_fallback(monkeypatch):
+    """When k8s core API returns 0 namespaces, return [] and never fallback to synthetic data."""
+    from backend import k8s
+    class FakeCoreApi:
+        def list_namespace(self, _request_timeout=None):
+            class FakeResponse:
+                items = []
+            return FakeResponse()
+
+    monkeypatch.setattr(k8s, "_cached_namespaces", None)
+    monkeypatch.setattr(k8s, "_init_core_api", lambda: FakeCoreApi())
 
     ns = k8s.list_cluster_namespaces()
     assert ns == []

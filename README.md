@@ -287,8 +287,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Run server with live reload (uses mock data when KRR is not installed locally)
-PYTHONPATH=. uvicorn backend.main:app --reload --port 8080
+# Run server with live reload (set ALLOW_MOCK_SCAN=true for local dev when KRR is not installed)
+ALLOW_MOCK_SCAN=true PYTHONPATH=. uvicorn backend.main:app --reload --port 8080
 ```
 
 ### 2. Frontend

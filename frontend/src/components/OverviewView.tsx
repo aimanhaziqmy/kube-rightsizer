@@ -62,7 +62,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   return (
     <div className="space-y-6 animate-fade-in">
       {/* 1. Top Executive KPI Stat Cards */}
-      <OverviewCards rows={rows} score={score} />
+      <OverviewCards rows={rows} score={score} clusterNamespaceCount={namespaces.length} />
 
       {/* 2. Visual Breakdown of Status Distribution */}
       <div className="soft-card p-5">

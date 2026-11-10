@@ -27,6 +27,7 @@ interface WorkloadsTableProps {
   selectedSeverity?: string;
   selectedCategory?: string;
   savingsOnly?: boolean;
+  onSelectNamespace?: (ns: string) => void;
   onClearFilters?: () => void;
 }
 
@@ -38,12 +39,19 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
   selectedSeverity = 'ALL',
   selectedCategory = 'ALL',
   savingsOnly = false,
+  onSelectNamespace,
   onClearFilters,
 }) => {
   // Local filter states
   const [tableSearch, setTableSearch] = useState(globalSearch || '');
   const [filterNs, setFilterNs] = useState<string>(selectedNamespace);
   const [filterKind, setFilterKind] = useState<string>('ALL');
+
+  const handleNamespaceChange = (newNs: string) => {
+    setFilterNs(newNs);
+    setCurrentPage(1);
+    onSelectNamespace?.(newNs);
+  };
   const [filterSeverity, setFilterSeverity] = useState<StatusFilter>(() => {
     if (selectedSeverity && selectedSeverity !== 'ALL') {
       return selectedSeverity as StatusFilter;
@@ -433,10 +441,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
         <div className="relative">
           <select
             value={filterNs}
-            onChange={(e) => {
-              setFilterNs(e.target.value);
-              setCurrentPage(1);
-            }}
+            onChange={(e) => handleNamespaceChange(e.target.value)}
             className="appearance-none bg-white border border-slate-200 hover:border-slate-300 rounded-lg pl-3 pr-8 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer transition shadow-2xs"
           >
             <option value="ALL">
@@ -615,7 +620,10 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                           This cluster namespace exists in Kubernetes, but has no running Deployments, StatefulSets, or DaemonSets analyzed by KRR.
                         </p>
                         <button
-                          onClick={() => setFilterNs('ALL')}
+                          onClick={() => {
+                            handleNamespaceChange('ALL');
+                            if (onClearFilters) onClearFilters();
+                          }}
                           className="mt-2 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-medium transition"
                         >
                           Show all namespaces with workloads

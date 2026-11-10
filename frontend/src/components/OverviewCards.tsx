@@ -15,10 +15,11 @@ import { formatCpu, formatMem } from '../utils/formatters';
 interface OverviewCardsProps {
   rows: WorkloadRow[];
   score?: number | null;
+  clusterNamespaceCount?: number;
   onFilterSeverity?: (severity: string) => void;
 }
 
-export const OverviewCards: React.FC<OverviewCardsProps> = ({ rows, score }) => {
+export const OverviewCards: React.FC<OverviewCardsProps> = ({ rows, score, clusterNamespaceCount }) => {
   const totals = computeTotals(rows);
 
   // Derive an efficiency score if not provided directly
@@ -175,8 +176,19 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({ rows, score }) => 
           </div>
           <div className="flex justify-between items-center text-slate-500">
             <span>Pods / Namespaces:</span>
-            <span className="font-semibold text-slate-700" title={`${totals.namespaceCount} namespaces with analyzed workloads`}>
-              {totals.podCount} pods · {totals.namespaceCount} ns with workloads
+            <span
+              className="font-semibold text-slate-700"
+              title={
+                clusterNamespaceCount !== undefined && clusterNamespaceCount > 0
+                  ? `${totals.namespaceCount} namespaces with analyzed workloads out of ${clusterNamespaceCount} total cluster namespaces`
+                  : `${totals.namespaceCount} namespaces with analyzed workloads`
+              }
+            >
+              {totals.podCount} pods · {totals.namespaceCount}
+              {clusterNamespaceCount !== undefined && clusterNamespaceCount > 0
+                ? ` of ${clusterNamespaceCount}`
+                : ''}{' '}
+              ns with workloads
             </span>
           </div>
         </div>
