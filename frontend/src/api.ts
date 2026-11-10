@@ -57,7 +57,7 @@ export async function deleteScan(id: string): Promise<boolean> {
 
 export function subscribeLiveLogs(
   onLog: (line: string) => void,
-  onStatusChange?: (status: string) => void
+  onStatusChange?: (status: string, error?: string) => void
 ): () => void {
   const eventSource = new EventSource('/api/scan/live');
 
@@ -67,7 +67,7 @@ export function subscribeLiveLogs(
       if (data.type === 'log' && data.line) {
         onLog(data.line);
       } else if (data.type === 'status') {
-        if (onStatusChange) onStatusChange(data.status);
+        if (onStatusChange) onStatusChange(data.status, data.error);
       }
     } catch {
       // Raw string fallback

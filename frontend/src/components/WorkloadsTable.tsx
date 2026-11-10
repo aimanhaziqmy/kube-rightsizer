@@ -16,8 +16,8 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { WorkloadRow, StatusFilter, SortKey, SortDirection } from '../types';
-import { formatCpu, formatMem, formatDelta, getStatusBadgeStyle } from '../utils/formatters';
-import { calculateDelta, generateResourceYaml } from '../utils/krrCalculations';
+import { formatCpu, formatMem, formatDelta, getStatusBadgeStyle, getCategoryBadgeStyle } from '../utils/formatters';
+import { calculateDelta, generateResourceYaml, categorizeWorkload } from '../utils/krrCalculations';
 import { exportToCsv, exportToJson } from '../utils/exportUtils';
 
 interface WorkloadsTableProps {
@@ -25,6 +25,8 @@ interface WorkloadsTableProps {
   globalSearch: string;
   selectedNamespace?: string;
   selectedSeverity?: string;
+  selectedCategory?: string;
+  savingsOnly?: boolean;
   onClearFilters?: () => void;
 }
 
@@ -33,6 +35,8 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
   globalSearch,
   selectedNamespace = 'ALL',
   selectedSeverity = 'ALL',
+  selectedCategory = 'ALL',
+  savingsOnly = false,
   onClearFilters,
 }) => {
   // Local filter states
@@ -40,7 +44,8 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
   const [filterNs, setFilterNs] = useState<string>(selectedNamespace);
   const [filterKind, setFilterKind] = useState<string>('ALL');
   const [filterSeverity, setFilterSeverity] = useState<string>(selectedSeverity);
-  const [onlySavings, setOnlySavings] = useState(false);
+  const [filterCategory, setFilterCategory] = useState<string>(selectedCategory);
+  const [onlySavings, setOnlySavings] = useState(savingsOnly);
 
   // Sorting
   const [sortKey, setSortKey] = useState<SortKey>('dcpu');
@@ -56,7 +61,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  // Keep filterNs / filterSeverity in sync when props change
+  // Keep filterNs / filterSeverity / filterCategory / savingsOnly in sync when props change
   React.useEffect(() => {
     if (selectedNamespace) setFilterNs(selectedNamespace);
   }, [selectedNamespace]);
@@ -64,6 +69,14 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
   React.useEffect(() => {
     if (selectedSeverity) setFilterSeverity(selectedSeverity);
   }, [selectedSeverity]);
+
+  React.useEffect(() => {
+    if (selectedCategory) setFilterCategory(selectedCategory);
+  }, [selectedCategory]);
+
+  React.useEffect(() => {
+    if (savingsOnly !== undefined) setOnlySavings(savingsOnly);
+  }, [savingsOnly]);
 
   // Unique namespaces & kinds for dropdowns
   const availableNamespaces = useMemo(() => {
@@ -126,6 +139,11 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
       // Kind filter
       if (filterKind !== 'ALL' && r.kind !== filterKind) return false;
 
+      // Category filter
+      if (filterCategory !== 'ALL') {
+        if (categorizeWorkload(r) !== filterCategory) return false;
+      }
+
       // Severity filter
       if (filterSeverity !== 'ALL') {
         const norm = (r.severity || 'UNKNOWN').toUpperCase();
@@ -145,7 +163,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
 
       return true;
     });
-  }, [rows, tableSearch, globalSearch, filterNs, filterKind, filterSeverity, onlySavings]);
+  }, [rows, tableSearch, globalSearch, filterNs, filterKind, filterSeverity, filterCategory, onlySavings]);
 
   const sortedRows = useMemo(() => {
     const sorted = [...filteredRows];
@@ -291,21 +309,22 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
             </select>
           </div>
 
-          {/* Severity Pills */}
+          {/* Status Category Pills */}
           <div className="flex items-center space-x-1 bg-slate-100/70 p-0.5 rounded-lg border border-slate-200/60">
-            {(['ALL', 'CRITICAL', 'WARNING', 'OK'] as const).map((sev) => {
-              const active = filterSeverity === sev;
-              const labels: Record<string, string> = {
-                ALL: 'All Statuses',
-                CRITICAL: 'Critical',
-                WARNING: 'Warning',
-                OK: 'Optimal',
-              };
+            {[
+              { id: 'ALL', label: 'All Status' },
+              { id: 'optimal', label: 'Optimal' },
+              { id: 'overprovisioned', label: 'Overprovisioned' },
+              { id: 'underprovisioned', label: 'Underprovisioned' },
+              { id: 'attention', label: 'Needs Attention' },
+            ].map((cat) => {
+              const active = filterCategory === cat.id;
               return (
                 <button
-                  key={sev}
+                  key={cat.id}
                   onClick={() => {
-                    setFilterSeverity(sev);
+                    setFilterCategory(cat.id);
+                    setFilterSeverity('ALL');
                     setCurrentPage(1);
                   }}
                   className={`px-2 py-1 rounded-md text-[11px] font-medium transition ${
@@ -314,7 +333,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  {labels[sev]}
+                  {cat.label}
                 </button>
               );
             })}
@@ -334,13 +353,14 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
             <span className="text-xs text-slate-600 font-medium">Show only savings</span>
           </label>
 
-          {(filterNs !== 'ALL' || filterKind !== 'ALL' || filterSeverity !== 'ALL' || onlySavings || tableSearch) && (
+          {(filterNs !== 'ALL' || filterKind !== 'ALL' || filterSeverity !== 'ALL' || filterCategory !== 'ALL' || onlySavings || tableSearch) && (
             <button
               onClick={() => {
                 setTableSearch('');
                 setFilterNs('ALL');
                 setFilterKind('ALL');
                 setFilterSeverity('ALL');
+                setFilterCategory('ALL');
                 setOnlySavings(false);
                 if (onClearFilters) onClearFilters();
               }}
@@ -415,7 +435,8 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                 const isExpanded = expandedRows.has(key);
                 const dCpu = calculateDelta(r, 'req_cpu');
                 const dMem = calculateDelta(r, 'req_mem');
-                const badge = getStatusBadgeStyle(r.severity || 'UNKNOWN');
+                const cat = categorizeWorkload(r);
+                const badge = getCategoryBadgeStyle(cat);
                 const cpuDeltaFmt = formatDelta(dCpu, formatCpu);
                 const memDeltaFmt = formatDelta(dMem, formatMem);
 

@@ -21,7 +21,7 @@ spec:
       serviceAccountName: kube-rightsizer
       containers:
         - name: kube-rightsizer
-          image: scriptertech/kube-rightsizer:v1.0.1
+          image: scriptertech/kube-rightsizer:v1.0.2
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

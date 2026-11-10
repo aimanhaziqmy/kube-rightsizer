@@ -6,13 +6,13 @@ import {
   History, 
   Settings, 
   Play, 
-  Sparkles,
-  Server,
+  RefreshCw,
   Activity,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Server
 } from 'lucide-react';
-import { ViewTab, ClusterStatus, ScanMeta } from '../types';
+import { ViewTab, ClusterStatus } from '../types';
 
 interface SidebarProps {
   currentTab: ViewTab;
@@ -22,6 +22,8 @@ interface SidebarProps {
   workloadCount: number;
   namespaceCount: number;
   scanCount: number;
+  isScanning: boolean;
+  scanElapsed: number;
   onOpenScanModal: () => void;
 }
 
@@ -33,10 +35,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   workloadCount,
   namespaceCount,
   scanCount,
+  isScanning,
+  scanElapsed,
   onOpenScanModal,
 }) => {
-  const isScanning = Boolean(clusterStatus?.running);
-
   const navItems = [
     {
       id: 'overview' as ViewTab,
@@ -85,12 +87,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ? 'bg-amber-500 hover:bg-amber-600 text-white animate-pulse'
               : 'bg-blue-600 hover:bg-blue-700 text-white'
           }`}
-          title="Trigger a new rightsizing scan"
+          title={isScanning ? "Scan in progress - click to view live logs" : "Trigger a new rightsizing scan"}
         >
           {isScanning ? (
             <>
-              <Activity className="w-4 h-4 animate-spin" />
-              {isOpen && <span>Scan in Progress...</span>}
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              {isOpen && <span>Scanning ({scanElapsed}s)...</span>}
             </>
           ) : (
             <>

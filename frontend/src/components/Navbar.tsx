@@ -4,11 +4,11 @@ import {
   Search, 
   Bell, 
   HelpCircle, 
-  Settings, 
   Layers, 
   ChevronDown, 
   RefreshCw,
-  Activity
+  Activity,
+  Play
 } from 'lucide-react';
 import { ClusterStatus, ScanMeta } from '../types';
 
@@ -16,6 +16,8 @@ interface NavbarProps {
   clusterStatus: ClusterStatus | null;
   activeScan: ScanMeta | null;
   scans: ScanMeta[];
+  isScanning: boolean;
+  scanElapsed: number;
   onSelectScan: (id: string) => void;
   onOpenScanModal: () => void;
   globalSearch: string;
@@ -29,6 +31,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   clusterStatus,
   activeScan,
   scans,
+  isScanning,
+  scanElapsed,
   onSelectScan,
   onOpenScanModal,
   globalSearch,
@@ -37,8 +41,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleSidebar,
   onRefresh,
 }) => {
-  const isScanning = Boolean(clusterStatus?.running);
-
   return (
     <header className="h-14 bg-white border-b border-slate-200 sticky top-0 z-30 flex items-center justify-between px-4 select-none">
       {/* Left: Hamburger & Brand */}
@@ -59,8 +61,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
           <div className="flex items-center space-x-2">
             <span className="font-semibold text-slate-900 text-sm tracking-tight">kube-rightsizer</span>
-            <span className="text-[11px] font-medium bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200/60">
-              v1.31
+            <span className="text-[11px] font-semibold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200/60">
+              v1.0.2
             </span>
           </div>
         </div>
@@ -85,7 +87,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="text"
             value={globalSearch}
             onChange={(e) => onGlobalSearchChange(e.target.value)}
-            placeholder="Search in all environments..."
+            placeholder="Search across all workloads and namespaces..."
             className="w-full bg-slate-50 focus:bg-white text-xs text-slate-800 placeholder-slate-400 pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition shadow-inner"
           />
         </div>
@@ -93,14 +95,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Right: Actions, Scan Pill, and Profile */}
       <div className="flex items-center space-x-2 sm:space-x-3">
-        {/* Active Scan Indicator / Selector */}
+        {/* Active Scan Indicator or Past Scan Selector */}
         {isScanning ? (
           <button
             onClick={onOpenScanModal}
-            className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-medium animate-pulse cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-semibold animate-pulse cursor-pointer shadow-2xs transition"
+            title="Scan in progress - Click to view live logs"
           >
             <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
-            <span>Scanning ({clusterStatus?.elapsed || 0}s)</span>
+            <span>Scan Active ({scanElapsed}s)</span>
           </button>
         ) : scans.length > 0 ? (
           <div className="hidden lg:flex items-center space-x-1 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-xs">
@@ -119,6 +122,27 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         ) : null}
 
+        {/* Scan Button in Navbar */}
+        {isScanning ? (
+          <button
+            disabled
+            className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-200 text-xs font-semibold cursor-not-allowed select-none shadow-2xs"
+            title="Scan is currently running in background"
+          >
+            <Play className="w-3.5 h-3.5 fill-slate-300 text-slate-300" />
+            <span>Scan Cluster</span>
+          </button>
+        ) : (
+          <button
+            onClick={onOpenScanModal}
+            className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition"
+            title="Trigger rightsizing scan"
+          >
+            <Play className="w-3.5 h-3.5 fill-white" />
+            <span>Scan Cluster</span>
+          </button>
+        )}
+
         {/* Refresh button */}
         <button
           onClick={onRefresh}
@@ -128,15 +152,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <RefreshCw className="w-4 h-4" />
         </button>
 
-        {/* Notifications / Help */}
-        <button
-          className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition relative"
-          title="Notifications"
-        >
-          <Bell className="w-4 h-4" />
-          <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-blue-600 rounded-full"></span>
-        </button>
-
+        {/* Documentation */}
         <a
           href="https://github.com/robusta-dev/krr"
           target="_blank"
