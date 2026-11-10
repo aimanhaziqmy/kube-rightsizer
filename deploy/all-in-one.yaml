@@ -103,7 +103,7 @@ spec:
       serviceAccountName: kube-rightsizer
       containers:
         - name: kube-rightsizer
-          image: scriptertech/kube-rightsizer:v1.0.3
+          image: scriptertech/kube-rightsizer:v1.0.5
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

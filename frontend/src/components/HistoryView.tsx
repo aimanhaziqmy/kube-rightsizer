@@ -43,7 +43,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       </div>
 
       <div className="soft-card overflow-hidden">
-        <table className="w-full text-left border-collapse soft-table">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse soft-table">
           <thead>
             <tr>
               <th>Scan ID / Time</th>
@@ -195,6 +196,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

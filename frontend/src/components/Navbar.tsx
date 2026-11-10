@@ -62,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center space-x-2">
             <span className="font-semibold text-slate-900 text-sm tracking-tight">kube-rightsizer</span>
             <span className="text-[11px] font-semibold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200/60">
-              v1.0.3
+              v1.0.5
             </span>
           </div>
         </div>

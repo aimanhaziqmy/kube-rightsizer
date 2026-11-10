@@ -19,7 +19,7 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ clusterStatus }) => {
   return (
-    <div className="max-w-4xl space-y-6 mb-8">
+    <div className="w-full space-y-6 mb-8">
       <div>
         <h2 className="text-base font-bold text-slate-800">Console Settings & Architecture</h2>
         <p className="text-xs text-slate-500">

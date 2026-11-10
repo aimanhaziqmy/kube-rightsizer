@@ -76,7 +76,7 @@ export const NamespacesView: React.FC<NamespacesViewProps> = ({ rows, onSelectNa
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
         {summaries.map((s) => (
           <div
             key={s.ns}
