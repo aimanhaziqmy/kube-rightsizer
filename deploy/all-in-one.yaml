@@ -1,0 +1,189 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-rightsizer
+  labels:
+    app.kubernetes.io/name: kube-rightsizer
+    app.kubernetes.io/part-of: kube-rightsizer
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-rightsizer
+  namespace: kube-rightsizer
+  labels:
+    app.kubernetes.io/name: kube-rightsizer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-rightsizer
+  labels:
+    app.kubernetes.io/name: kube-rightsizer
+rules:
+  - apiGroups: [""]
+    resources:
+      - namespaces
+      - pods
+      - nodes
+      - services
+      - configmaps
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+      - replicasets
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["argoproj.io"]
+    resources:
+      - rollouts
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-rightsizer
+  labels:
+    app.kubernetes.io/name: kube-rightsizer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-rightsizer
+subjects:
+  - kind: ServiceAccount
+    name: kube-rightsizer
+    namespace: kube-rightsizer
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kube-rightsizer-data
+  namespace: kube-rightsizer
+  labels:
+    app.kubernetes.io/name: kube-rightsizer
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-rightsizer
+  namespace: kube-rightsizer
+  labels:
+    app.kubernetes.io/name: kube-rightsizer
+    app.kubernetes.io/part-of: kube-rightsizer
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-rightsizer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-rightsizer
+    spec:
+      serviceAccountName: kube-rightsizer
+      containers:
+        - name: kube-rightsizer
+          image: scriptertech/kube-rightsizer:v1.0.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DATA_DIR
+              value: "/data/scans"
+            - name: STATIC_DIR
+              value: "/srv/dist"
+            - name: PROMETHEUS_URL
+              value: "http://prometheus-k8s.monitoring.svc:9090"
+            - name: CLUSTER_NAME
+              value: "kubernetes-cluster"
+            - name: KEEP_SCANS
+              value: "30"
+            - name: SCAN_TIMEOUT
+              value: "1800"
+          volumeMounts:
+            - name: scan-data
+              mountPath: /data/scans
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: scan-data
+          persistentVolumeClaim:
+            claimName: kube-rightsizer-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-rightsizer
+  namespace: kube-rightsizer
+  labels:
+    app.kubernetes.io/name: kube-rightsizer
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: kube-rightsizer
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kube-rightsizer
+  namespace: kube-rightsizer
+  labels:
+    app.kubernetes.io/name: kube-rightsizer
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: kube-rightsizer.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kube-rightsizer
+                port:
+                  number: 80

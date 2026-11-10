@@ -1,0 +1,11 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+frontend/node_modules
+frontend/dist
+.DS_Store
+*.tmp

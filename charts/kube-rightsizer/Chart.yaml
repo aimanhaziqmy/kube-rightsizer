@@ -1,0 +1,16 @@
+apiVersion: v2
+name: kube-rightsizer
+description: Production-grade Helm chart for kube-rightsizer - Open-Source Kubernetes Resource Rightsizing and Cost Optimization Console.
+type: application
+version: 1.0.1
+appVersion: "1.0.1"
+icon: https://raw.githubusercontent.com/robusta-dev/krr/master/docs/images/krr-logo.png
+keywords:
+  - kubernetes
+  - finops
+  - rightsizing
+  - robusta-krr
+  - prometheus
+  - cost-optimization
+maintainers:
+  - name: scriptertech

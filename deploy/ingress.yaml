@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kube-rightsizer
+  namespace: kube-rightsizer
+  labels:
+    app.kubernetes.io/name: kube-rightsizer
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: kube-rightsizer.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kube-rightsizer
+                port:
+                  number: 80

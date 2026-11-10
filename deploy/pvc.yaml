@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kube-rightsizer-data
+  namespace: kube-rightsizer
+  labels:
+    app.kubernetes.io/name: kube-rightsizer
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
