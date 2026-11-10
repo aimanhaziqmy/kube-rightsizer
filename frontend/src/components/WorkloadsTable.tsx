@@ -364,7 +364,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
     return (
       <th
         onClick={() => handleSort(key)}
-        className={`py-2 px-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-900 whitespace-nowrap transition-colors ${
+        className={`py-2 px-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-900 whitespace-nowrap transition-colors ${
           align === 'center' ? 'text-center' : 'text-left'
         }`}
       >
@@ -372,12 +372,12 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
           <span>{label}</span>
           {isSorted ? (
             sortDirection === 'asc' ? (
-              <ChevronUp className="w-3.5 h-3.5 text-blue-600" />
+              <ChevronUp className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
             ) : (
-              <ChevronDown className="w-3.5 h-3.5 text-blue-600" />
+              <ChevronDown className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
             )
           ) : (
-            <ArrowUpDown className="w-3 h-3 text-slate-300" />
+            <ArrowUpDown className="w-3 h-3 text-slate-300 flex-shrink-0" />
           )}
         </div>
       </th>
@@ -549,20 +549,20 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50/80 border-b border-slate-200">
             <tr>
-              <th className="w-7 pl-2.5 pr-1 py-2 text-center"></th>
+              <th className="w-7 pl-2 pr-1 py-2 text-center"></th>
               {renderSortHeader('WORKLOAD', 'name')}
               {renderSortHeader('CONTAINER', 'container')}
               {renderSortHeader('PODS', 'pods', 'center')}
-              <th className="py-2 px-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+              <th className="py-2 px-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                 CPU REQUEST
               </th>
-              <th className="py-2 px-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+              <th className="py-2 px-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                 CPU LIMIT
               </th>
-              <th className="py-2 px-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+              <th className="py-2 px-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                 MEM REQUEST
               </th>
-              <th className="py-2 px-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+              <th className="py-2 px-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                 MEM LIMIT
               </th>
               {renderSortHeader('CPU Δ', 'dcpu')}
@@ -592,7 +592,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                   <React.Fragment key={key}>
                     <tr className={`hover:bg-slate-50/80 transition-colors ${isExpanded ? 'bg-slate-50/70' : 'bg-white'}`}>
                       {/* 1. Caret / Expand */}
-                      <td className="w-7 pl-2.5 pr-1 py-2 text-center align-middle">
+                      <td className="w-7 pl-2 pr-1 py-2 text-center align-middle">
                         <button
                           onClick={() => toggleRow(key)}
                           className="p-0.5 text-slate-400 hover:text-slate-700 transition cursor-pointer"
@@ -607,8 +607,8 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                       </td>
 
                       {/* 2. Workload: Bold name on top, ns · kind underneath */}
-                      <td className="py-2 px-2 align-middle">
-                        <div className="flex flex-col min-w-[120px] max-w-[180px] lg:max-w-[210px]">
+                      <td className="py-2 px-1.5 align-middle">
+                        <div className="flex flex-col min-w-[95px] max-w-[135px] xl:max-w-[170px]">
                           <span className="font-semibold text-slate-900 text-xs truncate" title={r.name}>
                             {r.name}
                           </span>
@@ -619,14 +619,14 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                       </td>
 
                       {/* 3. Container */}
-                      <td className="py-2 px-2 align-middle">
-                        <span className="text-xs text-slate-700 truncate block min-w-[90px] max-w-[130px] lg:max-w-[160px]" title={r.container}>
+                      <td className="py-2 px-1.5 align-middle">
+                        <span className="text-xs text-slate-700 truncate block min-w-[75px] max-w-[105px] xl:max-w-[135px]" title={r.container}>
                           {r.container}
                         </span>
                       </td>
 
                       {/* 4. Pods (centered) */}
-                      <td className="py-2 px-2 align-middle text-center whitespace-nowrap">
+                      <td className="py-2 px-1 align-middle text-center whitespace-nowrap">
                         <div className="flex flex-col items-center">
                           <span className="font-medium text-xs text-slate-800">{r.pods || 1}</span>
                           {r.hpa && (
@@ -638,37 +638,37 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                       </td>
 
                       {/* 5. CPU Request (cur -> rec) */}
-                      <td className="py-2 px-2 align-middle whitespace-nowrap">
+                      <td className="py-2 px-1.5 align-middle whitespace-nowrap">
                         {renderTransition(r.cur.req_cpu, r.rec.req_cpu, 'cpu')}
                       </td>
 
                       {/* 6. CPU Limit (cur -> rec) */}
-                      <td className="py-2 px-2 align-middle whitespace-nowrap">
+                      <td className="py-2 px-1.5 align-middle whitespace-nowrap">
                         {renderTransition(r.cur.lim_cpu, r.rec.lim_cpu, 'cpu')}
                       </td>
 
                       {/* 7. Mem Request (cur -> rec) */}
-                      <td className="py-2 px-2 align-middle whitespace-nowrap">
+                      <td className="py-2 px-1.5 align-middle whitespace-nowrap">
                         {renderTransition(r.cur.req_mem, r.rec.req_mem, 'mem')}
                       </td>
 
                       {/* 8. Mem Limit (cur -> rec) */}
-                      <td className="py-2 px-2 align-middle whitespace-nowrap">
+                      <td className="py-2 px-1.5 align-middle whitespace-nowrap">
                         {renderTransition(r.cur.lim_mem, r.rec.lim_mem, 'mem')}
                       </td>
 
                       {/* 9. CPU Delta */}
-                      <td className="py-2 px-2 align-middle whitespace-nowrap">
+                      <td className="py-2 px-1.5 align-middle whitespace-nowrap">
                         {renderDeltaBadge(dCpu, formatCpu)}
                       </td>
 
                       {/* 10. Mem Delta */}
-                      <td className="py-2 px-2 align-middle whitespace-nowrap">
+                      <td className="py-2 px-1.5 align-middle whitespace-nowrap">
                         {renderDeltaBadge(dMem, formatMem)}
                       </td>
 
                       {/* 11. Severity */}
-                      <td className="py-2 px-2 align-middle whitespace-nowrap">
+                      <td className="py-2 px-1.5 align-middle whitespace-nowrap">
                         {renderSeverityBadge(r.severity)}
                       </td>
                     </tr>
@@ -676,48 +676,48 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                     {/* Expandable Details Row matching Image 1 (Low-profile 3-column layout) */}
                     {isExpanded && (
                       <tr className="bg-slate-50/70 border-b border-slate-200">
-                        <td colSpan={11} className="py-3 px-4">
-                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start w-full text-left">
+                        <td colSpan={11} className="py-2.5 px-3 sm:px-4">
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5 xl:gap-5 items-start w-full text-left">
                             {/* Column 1: CURRENT VS RECOMMENDED (PER POD) */}
-                            <div>
+                            <div className="min-w-0">
                               <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
                                 CURRENT VS RECOMMENDED (PER POD)
                               </div>
-                              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-2xs">
+                              <div className="bg-white rounded-lg border border-slate-200/90 overflow-hidden shadow-2xs">
                                 <table className="w-full text-xs">
                                   <thead>
                                     <tr className="border-b border-slate-100 text-[10px] font-semibold text-slate-400">
-                                      <th className="py-1.5 px-3 text-left font-medium text-transparent select-none w-1/3">Resource</th>
-                                      <th className="py-1.5 px-3 text-right font-semibold text-slate-500 uppercase tracking-wider w-1/3">CURRENT</th>
-                                      <th className="py-1.5 px-3 text-right font-semibold text-slate-500 uppercase tracking-wider w-1/3">RECOMMENDED</th>
+                                      <th className="py-1.5 px-3 text-left font-medium w-1/3"></th>
+                                      <th className="py-1.5 px-3 text-left font-semibold text-slate-500 uppercase tracking-wider w-1/3">CURRENT</th>
+                                      <th className="py-1.5 px-3 text-left font-semibold text-slate-500 uppercase tracking-wider w-1/3">RECOMMENDED</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-100">
                                     <tr>
-                                      <td className="py-1.5 px-3 text-left text-slate-500 font-medium">CPU request</td>
-                                      <td className="py-1.5 px-3 text-right text-slate-700">{formatCpu(r.cur.req_cpu)}</td>
-                                      <td className={`py-1.5 px-3 text-right ${formatCpu(r.rec.req_cpu) === 'unset' ? 'italic text-slate-400 font-normal' : 'font-bold text-slate-900'}`}>
+                                      <td className="py-1.5 px-3 text-left text-slate-500 font-medium whitespace-nowrap">CPU request</td>
+                                      <td className="py-1.5 px-3 text-left text-slate-700 whitespace-nowrap">{formatCpu(r.cur.req_cpu)}</td>
+                                      <td className={`py-1.5 px-3 text-left whitespace-nowrap ${formatCpu(r.rec.req_cpu) === 'unset' ? 'italic text-slate-400 font-normal' : 'font-bold text-slate-900'}`}>
                                         {formatCpu(r.rec.req_cpu)}
                                       </td>
                                     </tr>
                                     <tr>
-                                      <td className="py-1.5 px-3 text-left text-slate-500 font-medium">CPU limit</td>
-                                      <td className="py-1.5 px-3 text-right text-slate-700">{formatCpu(r.cur.lim_cpu)}</td>
-                                      <td className={`py-1.5 px-3 text-right ${formatCpu(r.rec.lim_cpu) === 'unset' ? 'italic text-slate-400 font-normal' : 'font-bold text-slate-900'}`}>
+                                      <td className="py-1.5 px-3 text-left text-slate-500 font-medium whitespace-nowrap">CPU limit</td>
+                                      <td className="py-1.5 px-3 text-left text-slate-700 whitespace-nowrap">{formatCpu(r.cur.lim_cpu)}</td>
+                                      <td className={`py-1.5 px-3 text-left whitespace-nowrap ${formatCpu(r.rec.lim_cpu) === 'unset' ? 'italic text-slate-400 font-normal' : 'font-bold text-slate-900'}`}>
                                         {formatCpu(r.rec.lim_cpu)}
                                       </td>
                                     </tr>
                                     <tr>
-                                      <td className="py-1.5 px-3 text-left text-slate-500 font-medium">Memory request</td>
-                                      <td className="py-1.5 px-3 text-right text-slate-700">{formatMem(r.cur.req_mem)}</td>
-                                      <td className={`py-1.5 px-3 text-right ${formatMem(r.rec.req_mem) === 'unset' ? 'italic text-slate-400 font-normal' : 'font-bold text-slate-900'}`}>
+                                      <td className="py-1.5 px-3 text-left text-slate-500 font-medium whitespace-nowrap">Memory request</td>
+                                      <td className="py-1.5 px-3 text-left text-slate-700 whitespace-nowrap">{formatMem(r.cur.req_mem)}</td>
+                                      <td className={`py-1.5 px-3 text-left whitespace-nowrap ${formatMem(r.rec.req_mem) === 'unset' ? 'italic text-slate-400 font-normal' : 'font-bold text-slate-900'}`}>
                                         {formatMem(r.rec.req_mem)}
                                       </td>
                                     </tr>
                                     <tr>
-                                      <td className="py-1.5 px-3 text-left text-slate-500 font-medium">Memory limit</td>
-                                      <td className="py-1.5 px-3 text-right text-slate-700">{formatMem(r.cur.lim_mem)}</td>
-                                      <td className={`py-1.5 px-3 text-right ${formatMem(r.rec.lim_mem) === 'unset' ? 'italic text-slate-400 font-normal' : 'font-bold text-slate-900'}`}>
+                                      <td className="py-1.5 px-3 text-left text-slate-500 font-medium whitespace-nowrap">Memory limit</td>
+                                      <td className="py-1.5 px-3 text-left text-slate-700 whitespace-nowrap">{formatMem(r.cur.lim_mem)}</td>
+                                      <td className={`py-1.5 px-3 text-left whitespace-nowrap ${formatMem(r.rec.lim_mem) === 'unset' ? 'italic text-slate-400 font-normal' : 'font-bold text-slate-900'}`}>
                                         {formatMem(r.rec.lim_mem)}
                                       </td>
                                     </tr>
@@ -730,7 +730,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                             </div>
 
                             {/* Column 2: YAML FOR CONTAINER {CONTAINER_NAME} */}
-                            <div>
+                            <div className="min-w-0">
                               <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 truncate" title={`YAML FOR CONTAINER ${r.container.toUpperCase()}`}>
                                 YAML FOR CONTAINER {r.container.toUpperCase()}
                               </div>
@@ -752,14 +752,14 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                                     </>
                                   )}
                                 </button>
-                                <pre className="text-xs font-mono text-slate-100 overflow-x-auto leading-relaxed pr-16 pt-0.5">
+                                <pre className="text-xs font-mono text-slate-100 overflow-x-auto leading-relaxed pr-20 pt-0.5">
                                   {generateResourceYaml(r)}
                                 </pre>
                               </div>
                             </div>
 
                             {/* Column 3: NOTES */}
-                            <div>
+                            <div className="min-w-0">
                               <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
                                 NOTES
                               </div>
@@ -771,7 +771,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                                       className="flex items-start space-x-2 text-xs bg-amber-50 border border-amber-200/80 px-2.5 py-1.5 rounded-md text-amber-800"
                                     >
                                       <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
-                                      <span>{w}</span>
+                                      <span className="break-words">{w}</span>
                                     </div>
                                   ))
                                 ) : null}
@@ -779,7 +779,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                                 {r.hpa && (
                                   <div className="flex items-start space-x-2 text-xs bg-indigo-50 border border-indigo-200/80 px-2.5 py-1.5 rounded-md text-indigo-700">
                                     <Zap className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0 mt-0.5" />
-                                    <span>HPA active: Recommended to only adjust memory or ensure CPU targets match percentile.</span>
+                                    <span className="break-words">HPA active: Recommended to only adjust memory or ensure CPU targets match percentile.</span>
                                   </div>
                                 )}
 
@@ -790,7 +790,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                                         key={k}
                                         className="inline-flex items-center space-x-1.5 text-xs bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-600 shadow-2xs"
                                       >
-                                        <Info className="w-3 h-3 text-blue-500" />
+                                        <Info className="w-3 h-3 text-blue-500 flex-shrink-0" />
                                         <span>
                                           <strong className="text-slate-700 capitalize">{k}:</strong> {String(v)}
                                         </span>
