@@ -1,28 +1,27 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
-  Filter, 
   ChevronDown, 
+  ChevronUp, 
   ChevronRight, 
   Copy, 
   Check, 
   Download, 
   ArrowUpDown, 
-  Layers, 
   AlertTriangle, 
   Info, 
-  Sparkles,
-  Zap,
-  RotateCcw
+  Zap, 
+  RotateCcw, 
+  X 
 } from 'lucide-react';
 import { WorkloadRow, StatusFilter, SortKey, SortDirection } from '../types';
-import { formatCpu, formatMem, formatDelta, getStatusBadgeStyle, getCategoryBadgeStyle } from '../utils/formatters';
-import { calculateDelta, generateResourceYaml, categorizeWorkload } from '../utils/krrCalculations';
+import { formatCpu, formatMem } from '../utils/formatters';
+import { calculateDelta, generateResourceYaml } from '../utils/krrCalculations';
 import { exportToCsv, exportToJson } from '../utils/exportUtils';
 
 interface WorkloadsTableProps {
   rows: WorkloadRow[];
-  globalSearch: string;
+  globalSearch?: string;
   selectedNamespace?: string;
   selectedSeverity?: string;
   selectedCategory?: string;
@@ -32,7 +31,7 @@ interface WorkloadsTableProps {
 
 export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
   rows,
-  globalSearch,
+  globalSearch = '',
   selectedNamespace = 'ALL',
   selectedSeverity = 'ALL',
   selectedCategory = 'ALL',
@@ -40,11 +39,20 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
   onClearFilters,
 }) => {
   // Local filter states
-  const [tableSearch, setTableSearch] = useState('');
+  const [tableSearch, setTableSearch] = useState(globalSearch || '');
   const [filterNs, setFilterNs] = useState<string>(selectedNamespace);
   const [filterKind, setFilterKind] = useState<string>('ALL');
-  const [filterSeverity, setFilterSeverity] = useState<string>(selectedSeverity);
-  const [filterCategory, setFilterCategory] = useState<string>(selectedCategory);
+  const [filterSeverity, setFilterSeverity] = useState<StatusFilter>(() => {
+    if (selectedSeverity && selectedSeverity !== 'ALL') {
+      return selectedSeverity as StatusFilter;
+    }
+    if (selectedCategory && selectedCategory !== 'ALL') {
+      if (selectedCategory === 'optimal') return 'OK';
+      if (selectedCategory === 'overprovisioned') return 'WARNING';
+      if (selectedCategory === 'attention') return 'CRITICAL';
+    }
+    return 'ALL';
+  });
   const [onlySavings, setOnlySavings] = useState(savingsOnly);
 
   // Sorting
@@ -61,33 +69,72 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  // Keep filterNs / filterSeverity / filterCategory / savingsOnly in sync when props change
-  React.useEffect(() => {
+  // Keep filters in sync when props change
+  useEffect(() => {
+    if (globalSearch !== undefined && globalSearch !== tableSearch) {
+      setTableSearch(globalSearch);
+    }
+  }, [globalSearch]);
+
+  useEffect(() => {
     if (selectedNamespace) setFilterNs(selectedNamespace);
   }, [selectedNamespace]);
 
-  React.useEffect(() => {
-    if (selectedSeverity) setFilterSeverity(selectedSeverity);
-  }, [selectedSeverity]);
+  useEffect(() => {
+    if (selectedSeverity && selectedSeverity !== 'ALL') {
+      setFilterSeverity(selectedSeverity as StatusFilter);
+    } else if (selectedCategory && selectedCategory !== 'ALL') {
+      if (selectedCategory === 'optimal') setFilterSeverity('OK');
+      else if (selectedCategory === 'overprovisioned') setFilterSeverity('WARNING');
+      else if (selectedCategory === 'attention') setFilterSeverity('CRITICAL');
+      else setFilterSeverity('ALL');
+    }
+  }, [selectedSeverity, selectedCategory]);
 
-  React.useEffect(() => {
-    if (selectedCategory) setFilterCategory(selectedCategory);
-  }, [selectedCategory]);
-
-  React.useEffect(() => {
+  useEffect(() => {
     if (savingsOnly !== undefined) setOnlySavings(savingsOnly);
   }, [savingsOnly]);
 
   // Unique namespaces & kinds for dropdowns
   const availableNamespaces = useMemo(() => {
-    const set = new Set(rows.map((r) => r.ns));
+    const set = new Set(rows.map((r) => r.ns || 'default'));
     return Array.from(set).sort();
   }, [rows]);
 
   const availableKinds = useMemo(() => {
-    const set = new Set(rows.map((r) => r.kind));
+    const set = new Set(rows.map((r) => r.kind || 'Deployment'));
     return Array.from(set).sort();
   }, [rows]);
+
+  // Live status counts scoped to selected namespace & kind
+  const statusCounts = useMemo(() => {
+    let critical = 0;
+    let warning = 0;
+    let ok = 0;
+    let unknown = 0;
+
+    const scopedRows = rows.filter((r) => {
+      if (filterNs !== 'ALL' && r.ns !== filterNs) return false;
+      if (filterKind !== 'ALL' && r.kind !== filterKind) return false;
+      return true;
+    });
+
+    for (const r of scopedRows) {
+      const sev = (r.severity || 'UNKNOWN').toUpperCase();
+      if (sev === 'CRITICAL') critical++;
+      else if (sev === 'WARNING') warning++;
+      else if (sev === 'OK' || sev === 'GOOD') ok++;
+      else unknown++;
+    }
+
+    return {
+      all: scopedRows.length,
+      critical,
+      warning,
+      ok,
+      unknown,
+    };
+  }, [rows, filterNs, filterKind]);
 
   const getRowKey = (r: WorkloadRow) => `${r.ns}/${r.kind}/${r.name}/${r.container}`;
 
@@ -117,20 +164,22 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
     }
   };
 
-  // Filtered and sorted data
+  // Filtered data with multi-token search
   const filteredRows = useMemo(() => {
-    const query = (tableSearch || globalSearch).toLowerCase().trim();
+    const query = tableSearch.toLowerCase().trim();
+    const terms = query ? query.split(/\s+/).filter(Boolean) : [];
 
     return rows.filter((r) => {
-      // Global and table search
-      if (query) {
-        const matchesName = r.name.toLowerCase().includes(query);
-        const matchesContainer = r.container.toLowerCase().includes(query);
-        const matchesNs = r.ns.toLowerCase().includes(query);
-        const matchesKind = r.kind.toLowerCase().includes(query);
-        if (!matchesName && !matchesContainer && !matchesNs && !matchesKind) {
-          return false;
-        }
+      // Search filter matching all tokens across workload, container, ns, kind
+      if (terms.length > 0) {
+        const name = (r.name || '').toLowerCase();
+        const container = (r.container || '').toLowerCase();
+        const ns = (r.ns || '').toLowerCase();
+        const kind = (r.kind || '').toLowerCase();
+        const matches = terms.every(
+          (t) => name.includes(t) || container.includes(t) || ns.includes(t) || kind.includes(t)
+        );
+        if (!matches) return false;
       }
 
       // Namespace filter
@@ -139,18 +188,13 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
       // Kind filter
       if (filterKind !== 'ALL' && r.kind !== filterKind) return false;
 
-      // Category filter
-      if (filterCategory !== 'ALL') {
-        if (categorizeWorkload(r) !== filterCategory) return false;
-      }
-
       // Severity filter
       if (filterSeverity !== 'ALL') {
-        const norm = (r.severity || 'UNKNOWN').toUpperCase();
-        if (filterSeverity === 'CRITICAL' && norm !== 'CRITICAL') return false;
-        if (filterSeverity === 'WARNING' && norm !== 'WARNING') return false;
-        if (filterSeverity === 'OK' && norm !== 'OK' && norm !== 'GOOD') return false;
-        if (filterSeverity === 'UNKNOWN' && norm !== 'UNKNOWN') return false;
+        const sev = (r.severity || 'UNKNOWN').toUpperCase();
+        if (filterSeverity === 'CRITICAL' && sev !== 'CRITICAL') return false;
+        if (filterSeverity === 'WARNING' && sev !== 'WARNING') return false;
+        if (filterSeverity === 'OK' && sev !== 'OK' && sev !== 'GOOD') return false;
+        if (filterSeverity === 'UNKNOWN' && (sev === 'CRITICAL' || sev === 'WARNING' || sev === 'OK' || sev === 'GOOD')) return false;
       }
 
       // Savings only toggle
@@ -163,52 +207,53 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
 
       return true;
     });
-  }, [rows, tableSearch, globalSearch, filterNs, filterKind, filterSeverity, filterCategory, onlySavings]);
+  }, [rows, tableSearch, filterNs, filterKind, filterSeverity, onlySavings]);
 
+  // Sorted data with null-safe sorting (nulls always sort to bottom)
   const sortedRows = useMemo(() => {
     const sorted = [...filteredRows];
     sorted.sort((a, b) => {
-      let valA: any = 0;
-      let valB: any = 0;
+      let valA: any = null;
+      let valB: any = null;
 
       switch (sortKey) {
         case 'name':
-          valA = a.name.toLowerCase();
-          valB = b.name.toLowerCase();
-          break;
-        case 'ns':
-          valA = a.ns.toLowerCase();
-          valB = b.ns.toLowerCase();
-          break;
-        case 'kind':
-          valA = a.kind.toLowerCase();
-          valB = b.kind.toLowerCase();
+          valA = (a.name || '').toLowerCase();
+          valB = (b.name || '').toLowerCase();
           break;
         case 'container':
-          valA = a.container.toLowerCase();
-          valB = b.container.toLowerCase();
+          valA = (a.container || '').toLowerCase();
+          valB = (b.container || '').toLowerCase();
           break;
         case 'pods':
           valA = a.pods || 1;
           valB = b.pods || 1;
           break;
         case 'dcpu':
-          valA = calculateDelta(a, 'req_cpu') ?? -999999;
-          valB = calculateDelta(b, 'req_cpu') ?? -999999;
+          valA = calculateDelta(a, 'req_cpu');
+          valB = calculateDelta(b, 'req_cpu');
           break;
         case 'dmem':
-          valA = calculateDelta(a, 'req_mem') ?? -999999;
-          valB = calculateDelta(b, 'req_mem') ?? -999999;
+          valA = calculateDelta(a, 'req_mem');
+          valB = calculateDelta(b, 'req_mem');
           break;
-        case 'severity':
+        case 'severity': {
           const order: Record<string, number> = { CRITICAL: 4, WARNING: 3, OK: 2, GOOD: 2, UNKNOWN: 1 };
-          valA = order[a.severity?.toUpperCase()] || 0;
-          valB = order[b.severity?.toUpperCase()] || 0;
+          valA = order[(a.severity || '').toUpperCase()] || 0;
+          valB = order[(b.severity || '').toUpperCase()] || 0;
           break;
+        }
         default:
-          valA = 0;
-          valB = 0;
+          valA = (a.name || '').toLowerCase();
+          valB = (b.name || '').toLowerCase();
       }
+
+      // Nulls always sort to bottom regardless of asc/desc
+      const isNullA = valA === null || valA === undefined;
+      const isNullB = valB === null || valB === undefined;
+      if (isNullA && isNullB) return 0;
+      if (isNullA) return 1;
+      if (isNullB) return -1;
 
       if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
       if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
@@ -224,147 +269,273 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
     return sortedRows.slice(start, start + pageSize);
   }, [sortedRows, currentPage, pageSize]);
 
-  return (
-    <div className="soft-card flex flex-col mb-8 overflow-hidden">
-      {/* Control Bar: Search & Filters */}
-      <div className="p-4 border-b border-slate-200 bg-white space-y-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          {/* Table Search */}
-          <div className="relative flex-1 max-w-sm">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={tableSearch}
-              onChange={(e) => {
-                setTableSearch(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Filter workloads, namespaces..."
-              className="w-full text-xs pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:bg-white focus:ring-1 focus:ring-blue-500 transition"
-            />
-          </div>
+  // Helper: render Transition (cur -> rec)
+  const renderTransition = (
+    curVal: number | null | string,
+    recVal: number | null | string,
+    type: 'cpu' | 'mem'
+  ) => {
+    const formatFn = type === 'cpu' ? formatCpu : formatMem;
+    const curFmt = formatFn(curVal);
+    const recFmt = formatFn(recVal);
+    const isCurUnset = curFmt === 'unset' || curVal === null || curVal === undefined;
+    const isRecUnset = recFmt === 'unset' || recVal === null || recVal === undefined;
 
-          {/* Export and Action Buttons */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => exportToCsv(sortedRows)}
-              disabled={sortedRows.length === 0}
-              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition disabled:opacity-50"
-              title="Export filtered workloads as CSV"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
-              <span>CSV</span>
-            </button>
-            <button
-              onClick={() => exportToJson(sortedRows)}
-              disabled={sortedRows.length === 0}
-              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition disabled:opacity-50"
-              title="Export filtered workloads as JSON"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
-              <span>JSON</span>
-            </button>
-          </div>
+    return (
+      <div className="flex items-center text-xs whitespace-nowrap">
+        <span className={isCurUnset ? 'italic text-slate-400 font-normal' : 'text-slate-600 font-normal'}>
+          {curFmt}
+        </span>
+        <span className="text-slate-400 mx-1.5 font-normal select-none">→</span>
+        <span className={isRecUnset ? 'italic text-slate-400 font-normal' : 'font-bold text-slate-900'}>
+          {recFmt}
+        </span>
+      </div>
+    );
+  };
+
+  // Helper: render Delta Badge (soft rounded pill)
+  const renderDeltaBadge = (delta: number | null, unitFormatter: (v: number) => string) => {
+    if (delta === null || delta === undefined) {
+      return <span className="text-slate-300 text-xs select-none pl-2">—</span>;
+    }
+    if (Math.abs(delta) < 1e-9) {
+      return (
+        <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+          0
+        </span>
+      );
+    }
+    if (delta > 0) {
+      // Savings (green soft pill)
+      return (
+        <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+          -{unitFormatter(delta)}
+        </span>
+      );
+    }
+    // Deficit / Need increase (rose soft pill)
+    return (
+      <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/60">
+        +{unitFormatter(Math.abs(delta))}
+      </span>
+    );
+  };
+
+  // Helper: render Severity Badge
+  const renderSeverityBadge = (severity: string) => {
+    const norm = (severity || 'UNKNOWN').toUpperCase();
+    switch (norm) {
+      case 'CRITICAL':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide bg-rose-50 text-rose-700 border border-rose-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            CRITICAL
+          </span>
+        );
+      case 'WARNING':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide bg-amber-50 text-amber-700 border border-amber-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            WARNING
+          </span>
+        );
+      case 'OK':
+      case 'GOOD':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            OK
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide bg-slate-100 text-slate-600 border border-slate-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+            UNKNOWN
+          </span>
+        );
+    }
+  };
+
+  // Helper: render sortable column header (used on WORKLOAD, CONTAINER, PODS, CPU Δ, MEM Δ, SEVERITY)
+  const renderSortHeader = (label: string, key: SortKey, align: 'left' | 'center' = 'left') => {
+    const isSorted = sortKey === key;
+    return (
+      <th
+        onClick={() => handleSort(key)}
+        className={`py-3 px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-900 whitespace-nowrap transition-colors ${
+          align === 'center' ? 'text-center' : 'text-left'
+        }`}
+      >
+        <div className={`flex items-center space-x-1 ${align === 'center' ? 'justify-center' : ''}`}>
+          <span>{label}</span>
+          {isSorted ? (
+            sortDirection === 'asc' ? (
+              <ChevronUp className="w-3.5 h-3.5 text-blue-600" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5 text-blue-600" />
+            )
+          ) : (
+            <ArrowUpDown className="w-3 h-3 text-slate-300" />
+          )}
+        </div>
+      </th>
+    );
+  };
+
+  const isFiltered = filterNs !== 'ALL' || filterKind !== 'ALL' || filterSeverity !== 'ALL' || onlySavings || !!tableSearch;
+
+  return (
+    <div className="soft-card flex flex-col mb-8 overflow-hidden bg-white border border-slate-200 rounded-xl shadow-xs">
+      {/* Card Header: Title & Subtitle on left, CSV/JSON on right (matching Image 3) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between px-5 pt-4 pb-2 bg-white gap-2">
+        <div className="flex items-baseline space-x-2.5">
+          <h3 className="text-base font-bold text-slate-900 tracking-tight">Containers</h3>
+          <span className="text-xs text-slate-400 font-normal">Expand a row for the YAML snippet</span>
         </div>
 
-        {/* Filter Badges & Selectors */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-600">
-          {/* Namespace Filter */}
-          <div className="flex items-center space-x-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
-            <span className="text-[11px] font-medium text-slate-400">Namespace:</span>
-            <select
-              value={filterNs}
-              onChange={(e) => {
-                setFilterNs(e.target.value);
+        {/* CSV & JSON Export */}
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => exportToCsv(sortedRows)}
+            disabled={sortedRows.length === 0}
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition disabled:opacity-40 cursor-pointer shadow-2xs"
+            title="Export filtered containers as CSV"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-500" />
+            <span>CSV</span>
+          </button>
+          <button
+            onClick={() => exportToJson(sortedRows)}
+            disabled={sortedRows.length === 0}
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition disabled:opacity-40 cursor-pointer shadow-2xs"
+            title="Export filtered containers as JSON"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-500" />
+            <span>JSON</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Unified Toolbar directly above the table header (matching Image 3) */}
+      <div className="px-5 pt-2 pb-3.5 bg-white flex flex-wrap items-center gap-2.5">
+        {/* 1. Namespace Filter Dropdown */}
+        <div className="relative">
+          <select
+            value={filterNs}
+            onChange={(e) => {
+              setFilterNs(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="appearance-none bg-white border border-slate-200 hover:border-slate-300 rounded-lg pl-3 pr-8 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer transition shadow-2xs"
+          >
+            <option value="ALL">All namespaces ({availableNamespaces.length})</option>
+            {availableNamespaces.map((ns) => (
+              <option key={ns} value={ns}>
+                {ns}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+
+        {/* 2. Kind Filter Dropdown */}
+        <div className="relative">
+          <select
+            value={filterKind}
+            onChange={(e) => {
+              setFilterKind(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="appearance-none bg-white border border-slate-200 hover:border-slate-300 rounded-lg pl-3 pr-8 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer transition shadow-2xs"
+          >
+            <option value="ALL">All kinds</option>
+            {availableKinds.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+
+        {/* 3. Status Pills in a single segmented control (matching Image 3) */}
+        <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50/60 p-0.5 shadow-2xs">
+          {[
+            { id: 'ALL', label: 'All', count: statusCounts.all },
+            { id: 'CRITICAL', label: 'Critical', count: statusCounts.critical },
+            { id: 'WARNING', label: 'Warning', count: statusCounts.warning },
+            { id: 'OK', label: 'OK', count: statusCounts.ok },
+            { id: 'UNKNOWN', label: 'Unknown', count: statusCounts.unknown },
+          ].map((pill) => {
+            const active = filterSeverity === pill.id;
+            return (
+              <button
+                key={pill.id}
+                onClick={() => {
+                  setFilterSeverity(pill.id as StatusFilter);
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer select-none inline-flex items-center gap-1.5 ${
+                  active
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                }`}
+              >
+                <span>{pill.label}</span>
+                <span className={active ? 'text-slate-300 text-[11px] font-normal' : 'text-slate-400 text-[11px] font-normal'}>
+                  {pill.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 4. Inline Search Bar spanning available width (matching Image 3) */}
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={tableSearch}
+            onChange={(e) => {
+              setTableSearch(e.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder="Search workload or container"
+            className="w-full pl-9 pr-7 py-1.5 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 transition shadow-2xs"
+          />
+          {tableSearch && (
+            <button
+              onClick={() => {
+                setTableSearch('');
                 setCurrentPage(1);
               }}
-              className="bg-transparent font-medium text-slate-700 focus:outline-none cursor-pointer"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+              title="Clear search"
             >
-              <option value="ALL">All Namespaces ({availableNamespaces.length})</option>
-              {availableNamespaces.map((ns) => (
-                <option key={ns} value={ns}>
-                  {ns}
-                </option>
-              ))}
-            </select>
-          </div>
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
 
-          {/* Kind Filter */}
-          <div className="flex items-center space-x-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
-            <span className="text-[11px] font-medium text-slate-400">Kind:</span>
-            <select
-              value={filterKind}
-              onChange={(e) => {
-                setFilterKind(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-transparent font-medium text-slate-700 focus:outline-none cursor-pointer"
-            >
-              <option value="ALL">All Kinds</option>
-              {availableKinds.map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status Category Pills */}
-          <div className="flex items-center space-x-1 bg-slate-100/70 p-0.5 rounded-lg border border-slate-200/60">
-            {[
-              { id: 'ALL', label: 'All Status' },
-              { id: 'optimal', label: 'Optimal' },
-              { id: 'overprovisioned', label: 'Overprovisioned' },
-              { id: 'underprovisioned', label: 'Underprovisioned' },
-              { id: 'attention', label: 'Needs Attention' },
-            ].map((cat) => {
-              const active = filterCategory === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => {
-                    setFilterCategory(cat.id);
-                    setFilterSeverity('ALL');
-                    setCurrentPage(1);
-                  }}
-                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition ${
-                    active
-                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200/60 font-semibold'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Only Savings Toggle */}
-          <label className="flex items-center space-x-1.5 cursor-pointer ml-auto select-none">
-            <input
-              type="checkbox"
-              checked={onlySavings}
-              onChange={(e) => {
-                setOnlySavings(e.target.checked);
-                setCurrentPage(1);
-              }}
-              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
-            />
-            <span className="text-xs text-slate-600 font-medium">Show only savings</span>
-          </label>
-
-          {(filterNs !== 'ALL' || filterKind !== 'ALL' || filterSeverity !== 'ALL' || filterCategory !== 'ALL' || onlySavings || tableSearch) && (
+        {/* 5. Live Container Counter & Reset Filter (matching Image 3) */}
+        <div className="flex items-center space-x-2.5 select-none whitespace-nowrap ml-auto text-xs">
+          <span className="text-slate-500 font-medium">
+            {filteredRows.length} of {rows.length} containers
+          </span>
+          {isFiltered && (
             <button
               onClick={() => {
                 setTableSearch('');
                 setFilterNs('ALL');
                 setFilterKind('ALL');
                 setFilterSeverity('ALL');
-                setFilterCategory('ALL');
                 setOnlySavings(false);
                 if (onClearFilters) onClearFilters();
               }}
-              className="text-[11px] text-blue-600 hover:text-blue-800 flex items-center space-x-1 ml-1"
+              className="text-xs text-blue-600 hover:text-blue-800 flex items-center space-x-1 cursor-pointer transition font-medium pl-1"
+              title="Reset all filters"
             >
               <RotateCcw className="w-3 h-3" />
               <span>Reset</span>
@@ -373,58 +544,39 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
         </div>
       </div>
 
-      {/* Table Content */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse soft-table">
-          <thead>
+      {/* Table Content: 10 Explicit Columns matching Image 2 & Image 3 */}
+      <div className="overflow-x-auto border-t border-slate-200">
+        <table className="w-full text-left border-collapse">
+          <thead className="bg-slate-50/80 border-b border-slate-200">
             <tr>
-              <th className="w-8"></th>
-              <th onClick={() => handleSort('name')} className="cursor-pointer hover:text-slate-900">
-                <div className="flex items-center space-x-1">
-                  <span>Workload & Container</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                </div>
+              <th className="w-8 pl-3 pr-1 py-3"></th>
+              {renderSortHeader('WORKLOAD', 'name')}
+              {renderSortHeader('CONTAINER', 'container')}
+              {renderSortHeader('PODS', 'pods', 'center')}
+              <th className="py-3 px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                CPU REQUEST
               </th>
-              <th onClick={() => handleSort('ns')} className="cursor-pointer hover:text-slate-900">
-                <div className="flex items-center space-x-1">
-                  <span>Namespace</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                </div>
+              <th className="py-3 px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                CPU LIMIT
               </th>
-              <th onClick={() => handleSort('pods')} className="cursor-pointer hover:text-slate-900 text-center">
-                <div className="flex items-center justify-center space-x-1">
-                  <span>Pods</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                </div>
+              <th className="py-3 px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                MEM REQUEST
               </th>
-              <th onClick={() => handleSort('dcpu')} className="cursor-pointer hover:text-slate-900">
-                <div className="flex items-center space-x-1">
-                  <span>CPU (Cur → Rec)</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                </div>
+              <th className="py-3 px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                MEM LIMIT
               </th>
-              <th onClick={() => handleSort('dmem')} className="cursor-pointer hover:text-slate-900">
-                <div className="flex items-center space-x-1">
-                  <span>Memory (Cur → Rec)</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                </div>
-              </th>
-              <th onClick={() => handleSort('severity')} className="cursor-pointer hover:text-slate-900">
-                <div className="flex items-center space-x-1">
-                  <span>Status</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                </div>
-              </th>
-              <th className="w-20 text-right">Actions</th>
+              {renderSortHeader('CPU Δ', 'dcpu')}
+              {renderSortHeader('MEM Δ', 'dmem')}
+              {renderSortHeader('SEVERITY', 'severity')}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {paginatedRows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-slate-500">
+                <td colSpan={11} className="text-center py-14 text-slate-500">
                   <div className="flex flex-col items-center justify-center space-y-2">
                     <Info className="w-6 h-6 text-slate-400" />
-                    <p className="text-sm font-medium text-slate-600">No matching workloads found</p>
+                    <p className="text-sm font-semibold text-slate-700">No matching containers found</p>
                     <p className="text-xs text-slate-400">Try adjusting your filters or search terms.</p>
                   </div>
                 </td>
@@ -435,19 +587,15 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                 const isExpanded = expandedRows.has(key);
                 const dCpu = calculateDelta(r, 'req_cpu');
                 const dMem = calculateDelta(r, 'req_mem');
-                const cat = categorizeWorkload(r);
-                const badge = getCategoryBadgeStyle(cat);
-                const cpuDeltaFmt = formatDelta(dCpu, formatCpu);
-                const memDeltaFmt = formatDelta(dMem, formatMem);
 
                 return (
                   <React.Fragment key={key}>
-                    <tr className={isExpanded ? 'expanded-parent' : ''}>
-                      {/* Expand Toggle */}
-                      <td className="text-center pl-3 pr-1">
+                    <tr className={`hover:bg-slate-50/80 transition-colors ${isExpanded ? 'bg-slate-50/70' : 'bg-white'}`}>
+                      {/* 1. Caret / Expand */}
+                      <td className="text-center pl-3 pr-1 py-3 align-middle">
                         <button
                           onClick={() => toggleRow(key)}
-                          className="p-1 text-slate-400 hover:text-slate-700 transition"
+                          className="p-1 text-slate-400 hover:text-slate-700 transition cursor-pointer"
                           title={isExpanded ? 'Collapse row' : 'Expand row details'}
                         >
                           {isExpanded ? (
@@ -458,130 +606,87 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                         </button>
                       </td>
 
-                      {/* Workload & Container Name */}
-                      <td>
-                        <div className="flex flex-col min-w-[160px]">
-                          <div className="flex items-center space-x-2">
-                            <span className="font-semibold text-slate-800 text-xs truncate max-w-[220px]">
-                              {r.name}
-                            </span>
-                            <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                              {r.kind}
-                            </span>
-                          </div>
-                          <span className="text-[11px] text-slate-500 font-mono mt-0.5 truncate max-w-[220px]">
-                            {r.container}
+                      {/* 2. Workload: Bold name on top, ns · kind underneath */}
+                      <td className="py-3 px-3 align-middle">
+                        <div className="flex flex-col min-w-[170px] max-w-[340px]">
+                          <span className="font-semibold text-slate-900 text-xs truncate" title={r.name}>
+                            {r.name}
+                          </span>
+                          <span className="text-[11px] text-slate-400 mt-0.5 truncate">
+                            {r.ns} · {r.kind}
                           </span>
                         </div>
                       </td>
 
-                      {/* Namespace */}
-                      <td>
-                        <span className="inline-block text-xs font-medium text-slate-700 bg-slate-100/80 px-2 py-0.5 rounded border border-slate-200/60">
-                          {r.ns}
+                      {/* 3. Container */}
+                      <td className="py-3 px-3 align-middle">
+                        <span className="text-xs text-slate-700 truncate block max-w-[180px]" title={r.container}>
+                          {r.container}
                         </span>
                       </td>
 
-                      {/* Pods & HPA */}
-                      <td className="text-center">
+                      {/* 4. Pods (centered) */}
+                      <td className="py-3 px-3 align-middle text-center">
                         <div className="flex flex-col items-center">
-                          <span className="font-semibold text-xs text-slate-700">{r.pods}</span>
+                          <span className="font-medium text-xs text-slate-800">{r.pods || 1}</span>
                           {r.hpa && (
-                            <span className="text-[9px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1 rounded mt-0.5" title="Horizontal Pod Autoscaler enabled">
+                            <span className="text-[9px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1 rounded mt-0.5" title="HPA active">
                               HPA
                             </span>
                           )}
                         </div>
                       </td>
 
-                      {/* CPU */}
-                      <td>
-                        <div className="flex items-center space-x-2 text-xs">
-                          <div className="flex flex-col">
-                            <span className="text-slate-500 text-[11px]">
-                              {formatCpu(r.cur.req_cpu)} → <strong className="text-slate-800 font-semibold">{formatCpu(r.rec.req_cpu)}</strong>
-                            </span>
-                          </div>
-                          {cpuDeltaFmt.type !== 'unset' && (
-                            <span
-                              className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
-                                cpuDeltaFmt.type === 'save'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
-                                  : cpuDeltaFmt.type === 'need'
-                                  ? 'bg-rose-50 text-rose-700 border border-rose-200/80'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {cpuDeltaFmt.text}
-                            </span>
-                          )}
-                        </div>
+                      {/* 5. CPU Request (cur -> rec) */}
+                      <td className="py-3 px-3 align-middle whitespace-nowrap">
+                        {renderTransition(r.cur.req_cpu, r.rec.req_cpu, 'cpu')}
                       </td>
 
-                      {/* Memory */}
-                      <td>
-                        <div className="flex items-center space-x-2 text-xs">
-                          <div className="flex flex-col">
-                            <span className="text-slate-500 text-[11px]">
-                              {formatMem(r.cur.req_mem)} → <strong className="text-slate-800 font-semibold">{formatMem(r.rec.req_mem)}</strong>
-                            </span>
-                          </div>
-                          {memDeltaFmt.type !== 'unset' && (
-                            <span
-                              className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
-                                memDeltaFmt.type === 'save'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
-                                  : memDeltaFmt.type === 'need'
-                                  ? 'bg-rose-50 text-rose-700 border border-rose-200/80'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {memDeltaFmt.text}
-                            </span>
-                          )}
-                        </div>
+                      {/* 6. CPU Limit (cur -> rec) */}
+                      <td className="py-3 px-3 align-middle whitespace-nowrap">
+                        {renderTransition(r.cur.lim_cpu, r.rec.lim_cpu, 'cpu')}
                       </td>
 
-                      {/* Status / Severity */}
-                      <td>
-                        <span
-                          className={`inline-flex items-center space-x-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border ${badge.bg}`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
-                          <span>{badge.label}</span>
-                        </span>
+                      {/* 7. Mem Request (cur -> rec) */}
+                      <td className="py-3 px-3 align-middle whitespace-nowrap">
+                        {renderTransition(r.cur.req_mem, r.rec.req_mem, 'mem')}
                       </td>
 
-                      {/* Actions */}
-                      <td className="text-right pr-4">
-                        <button
-                          onClick={() => handleCopyYaml(r, key)}
-                          className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 rounded-md transition"
-                          title="Copy recommended resources YAML"
-                        >
-                          {copiedKey === key ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                        </button>
+                      {/* 8. Mem Limit (cur -> rec) */}
+                      <td className="py-3 px-3 align-middle whitespace-nowrap">
+                        {renderTransition(r.cur.lim_mem, r.rec.lim_mem, 'mem')}
+                      </td>
+
+                      {/* 9. CPU Delta */}
+                      <td className="py-3 px-3 align-middle whitespace-nowrap">
+                        {renderDeltaBadge(dCpu, formatCpu)}
+                      </td>
+
+                      {/* 10. Mem Delta */}
+                      <td className="py-3 px-3 align-middle whitespace-nowrap">
+                        {renderDeltaBadge(dMem, formatMem)}
+                      </td>
+
+                      {/* 11. Severity */}
+                      <td className="py-3 px-3 align-middle whitespace-nowrap">
+                        {renderSeverityBadge(r.severity)}
                       </td>
                     </tr>
 
                     {/* Expandable Details Row */}
                     {isExpanded && (
                       <tr className="bg-slate-50/70">
-                        <td colSpan={8} className="p-4 border-b border-slate-200">
-                          <div className="space-y-4">
+                        <td colSpan={11} className="p-4 border-b border-slate-200">
+                          <div className="space-y-4 max-w-5xl mx-auto">
                             {/* Comparison Cards Grid */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               {/* CPU Allocation Detail */}
-                              <div className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-sm">
+                              <div className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-2xs">
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
                                     CPU Allocations (Cores)
                                   </span>
-                                  <span className="text-[11px] text-slate-400">Total Pods: {r.pods}</span>
+                                  <span className="text-[11px] text-slate-400">Total Pods: {r.pods || 1}</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                                   <div className="bg-slate-50 p-2 rounded border border-slate-100">
@@ -596,16 +701,8 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                                   </div>
                                   <div className="bg-slate-50 p-2 rounded border border-slate-100">
                                     <div className="text-[10px] text-slate-400 font-medium">Total Cores Delta</div>
-                                    <div
-                                      className={`font-semibold ${
-                                        dCpu && dCpu > 0
-                                          ? 'text-emerald-600'
-                                          : dCpu && dCpu < 0
-                                          ? 'text-rose-600'
-                                          : 'text-slate-600'
-                                      }`}
-                                    >
-                                      {cpuDeltaFmt.text}
+                                    <div className="font-semibold mt-0.5">
+                                      {renderDeltaBadge(dCpu, formatCpu)}
                                     </div>
                                     <div className="text-[10px] text-slate-400 mt-1">
                                       {dCpu && dCpu > 0 ? 'Savings' : dCpu && dCpu < 0 ? 'Deficit' : 'Balanced'}
@@ -615,12 +712,12 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                               </div>
 
                               {/* Memory Allocation Detail */}
-                              <div className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-sm">
+                              <div className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-2xs">
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
                                     Memory Allocations (RAM)
                                   </span>
-                                  <span className="text-[11px] text-slate-400">Total Pods: {r.pods}</span>
+                                  <span className="text-[11px] text-slate-400">Total Pods: {r.pods || 1}</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                                   <div className="bg-slate-50 p-2 rounded border border-slate-100">
@@ -635,16 +732,8 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                                   </div>
                                   <div className="bg-slate-50 p-2 rounded border border-slate-100">
                                     <div className="text-[10px] text-slate-400 font-medium">Total RAM Delta</div>
-                                    <div
-                                      className={`font-semibold ${
-                                        dMem && dMem > 0
-                                          ? 'text-emerald-600'
-                                          : dMem && dMem < 0
-                                          ? 'text-rose-600'
-                                          : 'text-slate-600'
-                                      }`}
-                                    >
-                                      {memDeltaFmt.text}
+                                    <div className="font-semibold mt-0.5">
+                                      {renderDeltaBadge(dMem, formatMem)}
                                     </div>
                                     <div className="text-[10px] text-slate-400 mt-1">
                                       {dMem && dMem > 0 ? 'Savings' : dMem && dMem < 0 ? 'Deficit' : 'Balanced'}
@@ -696,7 +785,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                                 <span>Kubernetes YAML Snippet</span>
                                 <button
                                   onClick={() => handleCopyYaml(r, key)}
-                                  className="flex items-center space-x-1 text-slate-300 hover:text-white transition"
+                                  className="flex items-center space-x-1 text-slate-300 hover:text-white transition cursor-pointer"
                                 >
                                   {copiedKey === key ? (
                                     <>
@@ -738,19 +827,19 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
           <strong className="text-slate-700 font-semibold">
             {Math.min(currentPage * pageSize, sortedRows.length)}
           </strong>{' '}
-          of <strong className="text-slate-700 font-semibold">{sortedRows.length}</strong> workloads
+          of <strong className="text-slate-700 font-semibold">{sortedRows.length}</strong> containers
         </div>
 
         <div className="flex items-center space-x-3">
           <div className="flex items-center space-x-1">
-            <span>Rows:</span>
+            <span>Rows per page:</span>
             <select
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
                 setCurrentPage(1);
               }}
-              className="bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-700 focus:outline-none"
+              className="bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-700 focus:outline-none cursor-pointer"
             >
               <option value={10}>10</option>
               <option value={25}>25</option>
@@ -763,7 +852,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
             <button
               onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
               disabled={currentPage <= 1}
-              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded hover:bg-slate-100 disabled:opacity-40 transition"
+              className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded hover:bg-slate-100 disabled:opacity-40 transition cursor-pointer"
             >
               Previous
             </button>
@@ -773,7 +862,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
             <button
               onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
               disabled={currentPage >= totalPages}
-              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded hover:bg-slate-100 disabled:opacity-40 transition"
+              className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded hover:bg-slate-100 disabled:opacity-40 transition cursor-pointer"
             >
               Next
             </button>

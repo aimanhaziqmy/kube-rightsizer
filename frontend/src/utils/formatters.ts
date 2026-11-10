@@ -7,6 +7,7 @@ export function formatCpu(v: number | null | string): string {
   if (v === null || v === undefined) return 'unset';
   if (typeof v === 'string') return v;
   if (!isNumeric(v)) return '?';
+  if (Math.abs(v) < 1e-9) return '0';
   if (Math.abs(v) < 1) {
     return Math.round(v * 1000) + 'm';
   }
@@ -17,6 +18,7 @@ export function formatMem(v: number | null | string): string {
   if (v === null || v === undefined) return 'unset';
   if (typeof v === 'string') return v;
   if (!isNumeric(v)) return '?';
+  if (Math.abs(v) < 1e-9) return '0';
   if (Math.abs(v) >= GI) {
     return (v / GI).toFixed(1) + 'Gi';
   }

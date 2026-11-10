@@ -2,8 +2,8 @@
 
 > Open-Source Kubernetes Resource Rightsizing and Cost Optimization Console.
 
-[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-scriptertech%2Fkube--rightsizer%3Av1.0.2-blue.svg?logo=docker)](https://hub.docker.com/r/scriptertech/kube-rightsizer)
-[![Helm Chart](https://img.shields.io/badge/Helm%20Chart-v1.0.2-orange.svg?logo=helm)](./charts/kube-rightsizer)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-scriptertech%2Fkube--rightsizer%3Av1.0.3-blue.svg?logo=docker)](https://hub.docker.com/r/scriptertech/kube-rightsizer)
+[![Helm Chart](https://img.shields.io/badge/Helm%20Chart-v1.0.3-orange.svg?logo=helm)](./charts/kube-rightsizer)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Base: Robusta KRR](https://img.shields.io/badge/Engine-Robusta_KRR_v1.31-blueviolet.svg)](https://github.com/robusta-dev/krr)
 
@@ -78,7 +78,7 @@ Create a custom `my-values.yaml`:
 ```yaml
 image:
   repository: scriptertech/kube-rightsizer
-  tag: "v1.0.2"
+  tag: "v1.0.3"
   pullPolicy: IfNotPresent
 
 config:
@@ -145,7 +145,7 @@ helm uninstall kube-rightsizer -n kube-rightsizer
 | Parameter | Description | Default |
 |---|---|---|
 | `image.repository` | Image repository | `scriptertech/kube-rightsizer` |
-| `image.tag` | Image tag | `v1.0.2` |
+| `image.tag` | Image tag | `v1.0.3` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `replicaCount` | Replicas (uses Recreate strategy) | `1` |
 | `serviceAccount.create` | Create ServiceAccount | `true` |
@@ -175,7 +175,7 @@ You can run the official public image locally or on a bastion/jumpbox:
 
 ```bash
 # Pull the public image
-docker pull scriptertech/kube-rightsizer:v1.0.2
+docker pull scriptertech/kube-rightsizer:v1.0.3
 
 # Run container mounted to host kubeconfig
 docker run -d \
@@ -185,7 +185,7 @@ docker run -d \
   -e CLUSTER_NAME="my-cluster" \
   -v ~/.kube/config:/root/.kube/config:ro \
   -v kube-rightsizer-data:/data/scans \
-  scriptertech/kube-rightsizer:v1.0.2
+  scriptertech/kube-rightsizer:v1.0.3
 ```
 
 #### Docker Compose
@@ -195,7 +195,7 @@ version: '3.8'
 
 services:
   kube-rightsizer:
-    image: scriptertech/kube-rightsizer:v1.0.2
+    image: scriptertech/kube-rightsizer:v1.0.3
     container_name: kube-rightsizer
     restart: unless-stopped
     ports:
@@ -216,7 +216,7 @@ volumes:
 
 ### 3. Deploy via Kubernetes Manifests
 
-Pre-configured manifests pointing to `scriptertech/kube-rightsizer:v1.0.2` are in the [`deploy/`](./deploy) directory.
+Pre-configured manifests pointing to `scriptertech/kube-rightsizer:v1.0.3` are in the [`deploy/`](./deploy) directory.
 
 #### Quick Deploy (All-in-One)
 

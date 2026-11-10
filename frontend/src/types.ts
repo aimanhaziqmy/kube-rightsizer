@@ -57,5 +57,5 @@ export type ViewTab = 'overview' | 'workloads' | 'namespaces' | 'history' | 'set
 
 export type StatusFilter = 'ALL' | 'CRITICAL' | 'WARNING' | 'OK' | 'UNKNOWN';
 
-export type SortKey = 'name' | 'ns' | 'kind' | 'container' | 'pods' | 'dcpu' | 'dmem' | 'severity';
+export type SortKey = 'name' | 'ns' | 'kind' | 'container' | 'pods' | 'req_cpu' | 'lim_cpu' | 'req_mem' | 'lim_mem' | 'dcpu' | 'dmem' | 'severity';
 export type SortDirection = 'asc' | 'desc';

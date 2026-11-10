@@ -20,8 +20,8 @@ interface NavbarProps {
   scanElapsed: number;
   onSelectScan: (id: string) => void;
   onOpenScanModal: () => void;
-  globalSearch: string;
-  onGlobalSearchChange: (q: string) => void;
+  globalSearch?: string;
+  onGlobalSearchChange?: (q: string) => void;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
   onRefresh: () => void;
@@ -62,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center space-x-2">
             <span className="font-semibold text-slate-900 text-sm tracking-tight">kube-rightsizer</span>
             <span className="text-[11px] font-semibold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200/60">
-              v1.0.2
+              v1.0.3
             </span>
           </div>
         </div>
@@ -79,19 +79,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* Middle: Global Search */}
-      <div className="flex-1 max-w-md mx-6 hidden sm:block">
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            value={globalSearch}
-            onChange={(e) => onGlobalSearchChange(e.target.value)}
-            placeholder="Search across all workloads and namespaces..."
-            className="w-full bg-slate-50 focus:bg-white text-xs text-slate-800 placeholder-slate-400 pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition shadow-inner"
-          />
-        </div>
-      </div>
+      {/* Middle: Flexible spacer */}
+      <div className="flex-1" />
 
       {/* Right: Actions, Scan Pill, and Profile */}
       <div className="flex items-center space-x-2 sm:space-x-3">
