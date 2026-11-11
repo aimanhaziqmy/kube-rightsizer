@@ -23,6 +23,17 @@ export interface ResourceAllocation {
   lim_mem: number | null | string;
 }
 
+/** Measured usage percentiles per resource ("p50", "p90", ..., "max").
+ * Extra keys (e.g. "p97") appear when a custom CPU percentile was configured. */
+export interface UsagePercentiles {
+  [key: string]: number | null | undefined;
+}
+
+export interface WorkloadUsage {
+  cpu?: UsagePercentiles;
+  memory?: UsagePercentiles;
+}
+
 export interface WorkloadRow {
   ns: string;
   kind: string;
@@ -30,11 +41,14 @@ export interface WorkloadRow {
   container: string;
   pods: number;
   hpa: boolean;
+  sidecar?: boolean;
   severity: 'CRITICAL' | 'WARNING' | 'OK' | 'GOOD' | 'UNKNOWN';
   cur: ResourceAllocation;
   rec: ResourceAllocation;
   info: Record<string, string>;
   warnings: string[];
+  /** Measured usage evidence; undefined for scans made before v1.1.0. */
+  usage?: WorkloadUsage | null;
 }
 
 export interface ScanDetail extends ScanMeta {

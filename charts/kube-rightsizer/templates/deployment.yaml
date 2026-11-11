@@ -52,6 +52,10 @@ spec:
               value: {{ .Values.config.clusterName | quote }}
             - name: KEEP_SCANS
               value: {{ .Values.config.keepScans | quote }}
+            - name: EXCLUDED_NAMESPACES
+              value: {{ .Values.config.excludedNamespaces | quote }}
+            - name: SIDECAR_CONTAINERS
+              value: {{ .Values.config.sidecarContainers | quote }}
             - name: SCAN_TIMEOUT
               value: {{ .Values.config.scanTimeout | quote }}
             {{- if .Values.config.auth.enabled }}

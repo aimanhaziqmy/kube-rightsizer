@@ -103,7 +103,7 @@ spec:
       serviceAccountName: kube-rightsizer
       containers:
         - name: kube-rightsizer
-          image: scriptertech/kube-rightsizer:v1.0.9
+          image: scriptertech/kube-rightsizer:v1.1.1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -120,6 +120,10 @@ spec:
               value: "kubernetes-cluster"
             - name: KEEP_SCANS
               value: "30"
+            - name: EXCLUDED_NAMESPACES
+              value: "kube-system"
+            - name: SIDECAR_CONTAINERS
+              value: "istio-proxy,envoy,linkerd-proxy,linkerd2-proxy,jaeger-agent,otel-collector,datadog-agent"
             - name: SCAN_TIMEOUT
               value: "1800"
           volumeMounts:

@@ -8,7 +8,7 @@ image:
   repository: scriptertech/kube-rightsizer
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "v1.0.9"
+  tag: "v1.1.1"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -41,6 +41,10 @@ config:
   staticDir: "/srv/dist"
   keepScans: 30
   scanTimeout: 1800
+  # Namespaces excluded from recommendations (comma-separated)
+  excludedNamespaces: "kube-system"
+  # Well-known sidecar container names tagged in the UI (comma-separated)
+  sidecarContainers: "istio-proxy,envoy,linkerd-proxy,linkerd2-proxy,jaeger-agent,otel-collector,datadog-agent"
   auth:
     enabled: false
     # Optional existing secret containing AUTH_USER and AUTH_PASSWORD keys

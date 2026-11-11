@@ -50,8 +50,8 @@ export interface ScanDiff {
   container: string;
   pods: number;
   severity: string | null;
-  cur: { req_cpu: number | null; req_mem: number | null };
-  rec: { req_cpu: number | null; req_mem: number | null };
+  cur: { req_cpu: number | null | string; req_mem: number | null | string };
+  rec: { req_cpu: number | null | string; req_mem: number | null | string };
 }
 
 export interface TrendsScan {
@@ -129,15 +129,15 @@ export interface Mover {
   kind: string;
   name: string;
   container: string;
-  recFrom: { req_cpu: number | null; req_mem: number | null };
-  recTo: { req_cpu: number | null; req_mem: number | null };
+  recFrom: { req_cpu: number | null | string; req_mem: number | null | string };
+  recTo: { req_cpu: number | null | string; req_mem: number | null | string };
   /** Combined relative change used for ranking (higher = bigger mover). */
   relChange: number;
 }
 
 const EPS = 1e-9;
 
-function relativeChange(from: number | null, to: number | null): number {
+function relativeChange(from: number | null | string, to: number | null | string): number {
   if (!isNumeric(from) || !isNumeric(to)) return 0;
   return Math.abs(to - from) / Math.max(Math.abs(from), EPS);
 }

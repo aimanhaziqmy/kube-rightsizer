@@ -44,7 +44,9 @@ ENV DATA_DIR=/data/scans \
     PYTHONPATH=/srv \
     PORT=8080 \
     KEEP_SCANS=30 \
-    SCAN_TIMEOUT=1800
+    SCAN_TIMEOUT=1800 \
+    EXCLUDED_NAMESPACES=kube-system \
+    SIDECAR_CONTAINERS=istio-proxy,envoy,linkerd-proxy,linkerd2-proxy,jaeger-agent,otel-collector,datadog-agent
 
 # Directory for scan history persistence
 RUN python -c "import os; os.makedirs('/data/scans', exist_ok=True)"

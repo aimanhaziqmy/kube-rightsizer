@@ -2,8 +2,8 @@
 
 > Open-Source Kubernetes Resource Rightsizing and Cost Optimization Console.
 
-[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-scriptertech%2Fkube--rightsizer%3Av1.0.9-blue.svg?logo=docker)](https://hub.docker.com/r/scriptertech/kube-rightsizer)
-[![Helm Chart](https://img.shields.io/badge/Helm%20Chart-v1.0.9-orange.svg?logo=helm)](./charts/kube-rightsizer)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-scriptertech%2Fkube--rightsizer%3Av1.1.1-blue.svg?logo=docker)](https://hub.docker.com/r/scriptertech/kube-rightsizer)
+[![Helm Chart](https://img.shields.io/badge/Helm%20Chart-v1.1.1-orange.svg?logo=helm)](./charts/kube-rightsizer)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Base: Robusta KRR](https://img.shields.io/badge/Engine-Robusta_KRR_v1.31-blueviolet.svg)](https://github.com/robusta-dev/krr)
 
@@ -16,6 +16,7 @@
 - **Soft & Modern Console UI**: Soft pastel status badges, responsive navigation sidebar, micro-metrics, and live terminal drawer.
 - **Side-by-Side Allocations & Diff**: Instant comparison between current container CPU/Memory requests & limits against recommended values.
 - **Dynamic Parameter Tuning**: Configure CPU usage percentiles (e.g. 95th), memory headroom buffers (+15%), and lookback duration (1–30 days) on the fly.
+- **Auditable Recommendations ("Show Your Work")**: Every recommendation ships with measured evidence — a percentile strip (p50–max) captured straight from Prometheus, plus an auditable derivation line (CPU = p{N} of measured usage, memory = peak working set × buffer). HPA-managed CPU requests are visibly refused with a stated reason instead of guessed.
 - **Live SSE Streaming Terminal**: Server-Sent Events stream real-time logs directly from the scanning engine into the web UI.
 - **Namespace-Level Cost Breakdown**: Aggregated resource savings and container counts grouped by Kubernetes namespace.
 - **1-Click Remediation**: Copy ready-to-use Kubernetes YAML snippets directly into your manifests or GitOps repositories.
@@ -78,7 +79,7 @@ Create a custom `my-values.yaml`:
 ```yaml
 image:
   repository: scriptertech/kube-rightsizer
-  tag: "v1.0.9"
+  tag: "v1.1.1"
   pullPolicy: IfNotPresent
 
 config:
@@ -145,7 +146,7 @@ helm uninstall kube-rightsizer -n kube-rightsizer
 | Parameter | Description | Default |
 |---|---|---|
 | `image.repository` | Image repository | `scriptertech/kube-rightsizer` |
-| `image.tag` | Image tag | `v1.0.9` |
+| `image.tag` | Image tag | `v1.1.1` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `replicaCount` | Replicas (uses Recreate strategy) | `1` |
 | `serviceAccount.create` | Create ServiceAccount | `true` |
@@ -155,6 +156,8 @@ helm uninstall kube-rightsizer -n kube-rightsizer
 | `config.dataDir` | Persistent scan directory | `/data/scans` |
 | `config.keepScans` | Scan history retention count | `30` |
 | `config.scanTimeout` | Scan timeout in seconds | `1800` |
+| `config.excludedNamespaces` | Namespaces excluded from recommendations (comma-separated) | `kube-system` |
+| `config.sidecarContainers` | Sidecar container names tagged in the UI (comma-separated) | `istio-proxy,envoy,linkerd-proxy,...` |
 | `config.auth.enabled` | Enable HTTP Basic Authentication | `false` |
 | `config.auth.username` | Basic auth username | `""` |
 | `config.auth.password` | Basic auth password | `""` |
@@ -175,7 +178,7 @@ You can run the official public image locally or on a bastion/jumpbox:
 
 ```bash
 # Pull the public image
-docker pull scriptertech/kube-rightsizer:v1.0.9
+docker pull scriptertech/kube-rightsizer:v1.1.1
 
 # Run container mounted to host kubeconfig
 docker run -d \
@@ -185,7 +188,7 @@ docker run -d \
   -e CLUSTER_NAME="my-cluster" \
   -v ~/.kube/config:/root/.kube/config:ro \
   -v kube-rightsizer-data:/data/scans \
-  scriptertech/kube-rightsizer:v1.0.9
+  scriptertech/kube-rightsizer:v1.1.1
 ```
 
 #### Docker Compose
@@ -195,7 +198,7 @@ version: '3.8'
 
 services:
   kube-rightsizer:
-    image: scriptertech/kube-rightsizer:v1.0.9
+    image: scriptertech/kube-rightsizer:v1.1.1
     container_name: kube-rightsizer
     restart: unless-stopped
     ports:
@@ -216,7 +219,7 @@ volumes:
 
 ### 3. Deploy via Kubernetes Manifests
 
-Pre-configured manifests pointing to `scriptertech/kube-rightsizer:v1.0.9` are in the [`deploy/`](./deploy) directory.
+Pre-configured manifests pointing to `scriptertech/kube-rightsizer:v1.1.1` are in the [`deploy/`](./deploy) directory.
 
 #### Quick Deploy (All-in-One)
 
@@ -261,6 +264,8 @@ All settings can be configured via environment variables in Docker, Kubernetes, 
 | `CLUSTER_NAME` | `kubernetes-cluster` | Label displayed in web UI header |
 | `KEEP_SCANS` | `30` | Number of previous scans to keep before automatic rotation |
 | `SCAN_TIMEOUT` | `1800` | Engine execution timeout in seconds |
+| `EXCLUDED_NAMESPACES` | `kube-system` | Comma-separated namespaces excluded from recommendations |
+| `SIDECAR_CONTAINERS` | `istio-proxy,envoy,linkerd-proxy,...` | Comma-separated sidecar container names tagged in the UI |
 | `AUTH_USER` | `""` (Disabled) | Username for optional HTTP Basic Auth |
 | `AUTH_PASSWORD` | `""` (Disabled) | Password for optional HTTP Basic Auth |
 

@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="kube-rightsizer",
-    version="1.0.9",
+    version="1.1.1",
     description="Kubernetes Resource Rightsizing Console",
     lifespan=lifespan,
     dependencies=[Depends(verify_basic_auth)],
@@ -135,7 +135,13 @@ def trigger_scan(params: ScanParams):
 @app.get("/api/scans", response_model=List[ScanMeta])
 def list_scans():
     raw_metas = engine.list_metas()
-    return [ScanMeta(**m) for m in raw_metas]
+    valid_metas = []
+    for m in raw_metas:
+        try:
+            valid_metas.append(ScanMeta(**m))
+        except Exception:
+            pass
+    return valid_metas
 
 
 @app.get("/api/scans/trends")
@@ -162,12 +168,12 @@ def get_trends():
                 "pods": r.get("pods", 1),
                 "severity": r.get("severity"),
                 "cur": {
-                    "req_cpu": (r.get("cur") or {}).get("req_cpu"),
-                    "req_mem": (r.get("cur") or {}).get("req_mem"),
+                    "req_cpu": (r.get("cur") if isinstance(r.get("cur"), dict) else {}).get("req_cpu"),
+                    "req_mem": (r.get("cur") if isinstance(r.get("cur"), dict) else {}).get("req_mem"),
                 },
                 "rec": {
-                    "req_cpu": (r.get("rec") or {}).get("req_cpu"),
-                    "req_mem": (r.get("rec") or {}).get("req_mem"),
+                    "req_cpu": (r.get("rec") if isinstance(r.get("rec"), dict) else {}).get("req_cpu"),
+                    "req_mem": (r.get("rec") if isinstance(r.get("rec"), dict) else {}).get("req_mem"),
                 },
             }
             for r in (scan.get("rows") or [])
@@ -205,23 +211,23 @@ def get_workload_history(key: str):
                 "started": scan.get("started"),
                 "severity": r.get("severity"),
                 "cur": {
-                    "req_cpu": (r.get("cur") or {}).get("req_cpu"),
-                    "req_mem": (r.get("cur") or {}).get("req_mem"),
-                    "lim_cpu": (r.get("cur") or {}).get("lim_cpu"),
-                    "lim_mem": (r.get("cur") or {}).get("lim_mem"),
+                    "req_cpu": (r.get("cur") if isinstance(r.get("cur"), dict) else {}).get("req_cpu"),
+                    "req_mem": (r.get("cur") if isinstance(r.get("cur"), dict) else {}).get("req_mem"),
+                    "lim_cpu": (r.get("cur") if isinstance(r.get("cur"), dict) else {}).get("lim_cpu"),
+                    "lim_mem": (r.get("cur") if isinstance(r.get("cur"), dict) else {}).get("lim_mem"),
                 },
                 "rec": {
-                    "req_cpu": (r.get("rec") or {}).get("req_cpu"),
-                    "req_mem": (r.get("rec") or {}).get("req_mem"),
-                    "lim_cpu": (r.get("rec") or {}).get("lim_cpu"),
-                    "lim_mem": (r.get("rec") or {}).get("lim_mem"),
+                    "req_cpu": (r.get("rec") if isinstance(r.get("rec"), dict) else {}).get("req_cpu"),
+                    "req_mem": (r.get("rec") if isinstance(r.get("rec"), dict) else {}).get("req_mem"),
+                    "lim_cpu": (r.get("rec") if isinstance(r.get("rec"), dict) else {}).get("lim_cpu"),
+                    "lim_mem": (r.get("rec") if isinstance(r.get("rec"), dict) else {}).get("lim_mem"),
                 },
             })
             break
     return {"key": key, "points": points}
 
 
-@app.get("/api/scans/{scan_id}")
+@app.get("/api/scans/{scan_id}", response_model=ScanDetail)
 def get_scan(scan_id: str):
     scan = engine.get_scan(scan_id)
     if not scan:
@@ -246,8 +252,10 @@ def diff_scan(scan_id: str, compare_to: Optional[str] = None):
         baseline = engine.get_scan(compare_to)
     else:
         baseline = None
+        target_started = float(target.get("started") or 0.0)
         for meta in engine.list_metas():
-            if meta.get("status") != "done" or meta.get("started", 0) >= target.get("started", 0):
+            meta_started = float(meta.get("started") or 0.0)
+            if meta.get("status") != "done" or meta_started >= target_started:
                 continue
             baseline = engine.get_scan(meta["id"])
             break  # metas are sorted newest-first, so first hit = next-older done scan

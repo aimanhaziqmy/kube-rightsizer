@@ -15,13 +15,21 @@ import {
   X 
 } from 'lucide-react';
 import { WorkloadRow, StatusFilter, SortKey, SortDirection } from '../types';
-import { formatCpu, formatMem } from '../utils/formatters';
+import { formatCpu, formatMem, isNumeric } from '../utils/formatters';
 import { calculateDelta, generateResourceYaml } from '../utils/krrCalculations';
 import { exportToCsv, exportToJson } from '../utils/exportUtils';
+import { buildWhyLines, hasUsageData } from '../utils/evidence';
 import { DriftBadge } from './DriftBadge';
 import { Sparkline } from './Sparkline';
+import { UsageStrip } from './UsageStrip';
 import { fetchWorkloadHistory } from '../api';
 import { DiffChanges, HistoryPoint } from '../utils/scanDiff';
+
+interface WhyScanParams {
+  cpu_percentile: number;
+  memory_buffer_percentage: number;
+  history_days: number;
+}
 
 interface WorkloadsTableProps {
   rows: WorkloadRow[];
@@ -35,6 +43,8 @@ interface WorkloadsTableProps {
   onClearFilters?: () => void;
   /** Drift flags per workload key, from the cross-scan diff (optional). */
   drift?: Record<string, DiffChanges>;
+  /** Scan parameters for the auditable "why" derivation (optional). */
+  scanParams?: WhyScanParams;
 }
 
 export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
@@ -48,6 +58,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
   onSelectNamespace,
   onClearFilters,
   drift,
+  scanParams,
 }) => {
   // Local filter states
   const [tableSearch, setTableSearch] = useState(globalSearch || '');
@@ -310,6 +321,10 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
     const start = (currentPage - 1) * pageSize;
     return sortedRows.slice(start, start + pageSize);
   }, [sortedRows, currentPage, pageSize]);
+
+  // Helper: CPU request is controlled by an HPA when one exists and the engine
+  // did not produce a CPU recommendation (KRR refuses: "HPA detected").
+  const isHpaCpuRefused = (r: WorkloadRow) => r.hpa && !isNumeric(r.rec.req_cpu);
 
   // Helper: render Transition (cur -> rec)
   const renderTransition = (
@@ -705,9 +720,19 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
 
                       {/* 3. Container */}
                       <td className="py-2 px-1.5 align-middle">
-                        <span className="text-xs text-slate-700 truncate block min-w-[75px] max-w-[105px] xl:max-w-[135px]" title={r.container}>
-                          {r.container}
-                        </span>
+                        <div className="flex flex-col min-w-[75px] max-w-[105px] xl:max-w-[135px]">
+                          <span className="text-xs text-slate-700 truncate block" title={r.container}>
+                            {r.container}
+                          </span>
+                          {r.sidecar && (
+                            <span
+                              className="text-[9px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-1 rounded mt-0.5 self-start"
+                              title="Sidecar container (usually injected by a service mesh or agent)"
+                            >
+                              sidecar
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* 4. Pods (centered) */}
@@ -724,7 +749,20 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
 
                       {/* 5. CPU Request (cur -> rec) */}
                       <td className="py-2 px-1.5 align-middle whitespace-nowrap">
-                        {renderTransition(r.cur.req_cpu, r.rec.req_cpu, 'cpu')}
+                        {isHpaCpuRefused(r) ? (
+                          <div className="flex items-center text-xs whitespace-nowrap">
+                            <span className="text-slate-600 font-normal">{formatCpu(r.cur.req_cpu)}</span>
+                            <span className="text-slate-400 mx-1 font-normal select-none">→</span>
+                            <span
+                              className="italic text-indigo-700 font-medium"
+                              title="CPU requests are the HPA control input — the engine will not guess this value"
+                            >
+                              HPA-controlled
+                            </span>
+                          </div>
+                        ) : (
+                          renderTransition(r.cur.req_cpu, r.rec.req_cpu, 'cpu')
+                        )}
                       </td>
 
                       {/* 6. CPU Limit (cur -> rec) */}
@@ -786,9 +824,20 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                                     <tr>
                                       <td className="py-1.5 px-3 text-left text-slate-500 font-medium whitespace-nowrap">CPU request</td>
                                       <td className="py-1.5 px-3 text-left text-slate-700 whitespace-nowrap">{formatCpu(r.cur.req_cpu)}</td>
-                                      <td className={`py-1.5 px-3 text-left whitespace-nowrap ${formatCpu(r.rec.req_cpu) === 'unset' ? 'italic text-slate-400 font-normal' : 'font-bold text-slate-900'}`}>
-                                        {formatCpu(r.rec.req_cpu)}
-                                      </td>
+                                      {isHpaCpuRefused(r) ? (
+                                        <td className="py-1.5 px-3 text-left whitespace-nowrap">
+                                          <span
+                                            className="italic text-indigo-700 font-medium"
+                                            title="CPU requests are the HPA control input — the engine will not guess this value"
+                                          >
+                                            HPA-controlled
+                                          </span>
+                                        </td>
+                                      ) : (
+                                        <td className={`py-1.5 px-3 text-left whitespace-nowrap ${formatCpu(r.rec.req_cpu) === 'unset' ? 'italic text-slate-400 font-normal' : 'font-bold text-slate-900'}`}>
+                                          {formatCpu(r.rec.req_cpu)}
+                                        </td>
+                                      )}
                                     </tr>
                                     <tr>
                                       <td className="py-1.5 px-3 text-left text-slate-500 font-medium whitespace-nowrap">CPU limit</td>
@@ -928,6 +977,51 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                                 </div>
                               )}
                             </div>
+                          </div>
+
+                          {/* EVIDENCE: measured usage behind the recommendation (v1.1.0) */}
+                          <div className="mt-3 pt-3 border-t border-slate-200/80">
+                            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                              EVIDENCE — MEASURED USAGE{scanParams ? ` (LAST ${scanParams.history_days} DAYS)` : ''}
+                            </div>
+                            {hasUsageData(r) ? (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 max-w-4xl">
+                                <UsageStrip
+                                  title="CPU usage"
+                                  usage={r.usage?.cpu}
+                                  currentValue={isNumeric(r.cur.req_cpu) ? (r.cur.req_cpu as number) : null}
+                                  recommendedValue={isNumeric(r.rec.req_cpu) ? (r.rec.req_cpu as number) : null}
+                                  highlightKey={scanParams ? `p${scanParams.cpu_percentile}` : 'p95'}
+                                  format={formatCpu}
+                                />
+                                <UsageStrip
+                                  title="Memory usage"
+                                  usage={r.usage?.memory}
+                                  currentValue={isNumeric(r.cur.req_mem) ? (r.cur.req_mem as number) : null}
+                                  recommendedValue={isNumeric(r.rec.req_mem) ? (r.rec.req_mem as number) : null}
+                                  format={formatMem}
+                                />
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic">
+                                Raw usage data not captured in this scan (pre-v1.1.0) or no Prometheus data available. Run a new scan to see the evidence.
+                              </p>
+                            )}
+
+                            {(() => {
+                              const whyLines = buildWhyLines(r, scanParams);
+                              if (whyLines.length === 0) return null;
+                              return (
+                                <div className="mt-2.5 space-y-1">
+                                  {whyLines.map((l, idx) => (
+                                    <div key={idx} className="flex items-start space-x-2 text-xs text-slate-600">
+                                      <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
+                                      <span className="break-words">{l}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </td>
                       </tr>

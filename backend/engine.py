@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -14,6 +15,19 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Set
 from backend.models import ScanDetail, ScanMeta, ScanParams, WorkloadRow
 
 logger = logging.getLogger("kube-rightsizer.engine")
+
+
+def sanitize_for_json(obj: Any) -> Any:
+    """Recursively convert float('nan'), float('inf'), and -float('inf') to None for RFC 8259 compliance."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    elif isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [sanitize_for_json(v) for v in obj]
+    return obj
 
 def _get_data_dir() -> str:
     env_dir = os.environ.get("DATA_DIR")
@@ -41,6 +55,20 @@ KEEP_SCANS = int(os.environ.get("KEEP_SCANS", "30"))
 SCAN_TIMEOUT = int(os.environ.get("SCAN_TIMEOUT", "1800"))
 PROM_URL = os.environ.get("PROMETHEUS_URL", "http://prometheus-k8s.monitoring:9090")
 
+# Comma-separated environment lists; blank entries are ignored.
+def _env_csv(name: str, default: str) -> tuple:
+    raw = os.environ.get(name, default)
+    return tuple(x.strip() for x in raw.split(",") if x.strip())
+
+# Namespaces whose workloads never get recommendations shown (infra noise).
+EXCLUDED_NAMESPACES = _env_csv("EXCLUDED_NAMESPACES", "kube-system")
+# Well-known sidecar container names, tagged in the UI so their numbers are
+# not mistaken for app-container sizing errors.
+SIDECAR_CONTAINERS = _env_csv(
+    "SIDECAR_CONTAINERS",
+    "istio-proxy,envoy,linkerd-proxy,linkerd2-proxy,jaeger-agent,otel-collector,datadog-agent",
+)
+
 ID_RE = re.compile(r"^[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$")
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -63,9 +91,11 @@ class ScanEngine:
         return os.path.join(DATA_DIR, f"{sid}.json")
 
     def _write_json(self, path: str, data: Any):
+        clean_data = sanitize_for_json(data)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = f"{path}.tmp.{uuid.uuid4().hex[:6]}"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+            json.dump(clean_data, f, indent=2, allow_nan=False)
         os.replace(tmp, path)
 
     def recover(self):
@@ -84,10 +114,17 @@ class ScanEngine:
                 path = os.path.join(DATA_DIR, name)
                 try:
                     with open(path, "r", encoding="utf-8") as f:
-                        metas.append(json.load(f))
+                        metas.append(sanitize_for_json(json.load(f)))
                 except Exception as e:
                     logger.warning(f"Error reading scan meta {path}: {e}")
-        return sorted(metas, key=lambda m: m.get("started", 0), reverse=True)
+
+        def _safe_started(m: Dict[str, Any]) -> float:
+            val = m.get("started")
+            if isinstance(val, (int, float)) and not (math.isnan(val) or math.isinf(val)):
+                return float(val)
+            return 0.0
+
+        return sorted(metas, key=_safe_started, reverse=True)
 
     def get_scan(self, sid: str) -> Optional[Dict[str, Any]]:
         if not ID_RE.match(sid):
@@ -100,19 +137,20 @@ class ScanEngine:
                 try:
                     with open(mpath, "r", encoding="utf-8") as f:
                         meta = json.load(f)
-                    return {
+                    return sanitize_for_json({
                         **meta,
                         "rows": [],
                         "score": None,
                         "errors": [meta.get("error")] if meta.get("error") else [],
                         "cluster": {},
-                    }
+                    })
                 except Exception:
                     return None
             return None
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            return sanitize_for_json(data)
         except Exception as e:
             logger.error(f"Failed to read scan {sid}: {e}")
             return None
@@ -135,8 +173,9 @@ class ScanEngine:
         for m in metas[KEEP_SCANS:]:
             self.delete_scan(m["id"])
 
-    def slim(self, raw: Dict[str, Any]) -> Dict[str, Any]:
+    def slim(self, raw: Dict[str, Any], usage_map: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Convert verbose krr output to minimal UI representation."""
+        usage_map = usage_map or {}
         rows = []
         for s in (raw.get("scans") or []):
             if not isinstance(s, dict):
@@ -150,13 +189,30 @@ class ScanEngine:
             rec_req = r.get("requests") or {}
             rec_lim = r.get("limits") or {}
 
+            ns = o.get("namespace", "default")
+            container = o.get("container", "main")
+
+            if ns in EXCLUDED_NAMESPACES:
+                continue
+
+            def clean_val(val: Any) -> Any:
+                if val is None:
+                    return None
+                if isinstance(val, float):
+                    if math.isnan(val) or math.isinf(val):
+                        return None
+                    return val
+                if isinstance(val, (int, str)):
+                    return val
+                return None
+
             def get_rec_val(d, k):
                 if not isinstance(d, dict):
                     return None
                 sub = d.get(k)
                 if isinstance(sub, dict):
-                    return sub.get("value")
-                return sub
+                    return clean_val(sub.get("value"))
+                return clean_val(sub)
 
             info_dict = r.get("info")
             if not isinstance(info_dict, dict):
@@ -173,18 +229,20 @@ class ScanEngine:
             pods_count = sum(1 for p in pods_list if isinstance(p, dict) and not p.get("deleted", False)) or 1
 
             rows.append({
-                "ns": o.get("namespace", "default"),
+                "ns": ns,
                 "kind": o.get("kind", "Deployment"),
                 "name": o.get("name", "unknown"),
-                "container": o.get("container", "main"),
+                "container": container,
                 "pods": pods_count,
                 "hpa": o.get("hpa") is not None,
+                "sidecar": container in SIDECAR_CONTAINERS,
+                "usage": usage_map.get(f"{ns}|{container}", {}),
                 "severity": s.get("severity", "UNKNOWN"),
                 "cur": {
-                    "req_cpu": req.get("cpu") if isinstance(req, dict) else None,
-                    "req_mem": req.get("memory") if isinstance(req, dict) else None,
-                    "lim_cpu": lim.get("cpu") if isinstance(lim, dict) else None,
-                    "lim_mem": lim.get("memory") if isinstance(lim, dict) else None,
+                    "req_cpu": clean_val(req.get("cpu")) if isinstance(req, dict) else None,
+                    "req_mem": clean_val(req.get("memory")) if isinstance(req, dict) else None,
+                    "lim_cpu": clean_val(lim.get("cpu")) if isinstance(lim, dict) else None,
+                    "lim_mem": clean_val(lim.get("memory")) if isinstance(lim, dict) else None,
                 },
                 "rec": {
                     "req_cpu": get_rec_val(rec_req, "cpu"),
@@ -195,12 +253,65 @@ class ScanEngine:
                 "info": info,
                 "warnings": warnings,
             })
+        score_val = raw.get("score")
+        if isinstance(score_val, float) and (math.isnan(score_val) or math.isinf(score_val)):
+            score_val = None
+
         return {
             "rows": rows,
-            "score": raw.get("score"),
+            "score": score_val,
             "errors": raw.get("errors") or [],
             "cluster": raw.get("clusterSummary") or {},
         }
+
+    def _fetch_usage_evidence(self, p: Dict[str, Any]) -> Dict[str, Any]:
+        """Query Prometheus for measured usage percentiles backing each row.
+
+        Mirrors the KRR "simple" strategy inputs so the UI can show an auditable
+        derivation. Failures degrade honestly: recommendations are returned
+        without usage evidence instead of with synthetic numbers.
+        """
+        try:
+            from backend.prom import fetch_container_usage
+        except ImportError as e:
+            logger.warning(f"requests library unavailable; usage evidence disabled ({e})")
+            return {}
+        try:
+            self._broadcast_log("Measuring usage evidence from Prometheus...")
+            return fetch_container_usage(PROM_URL, p["history_days"] * 24, p["cpu_percentile"])
+        except Exception as e:
+            logger.warning(f"Usage evidence unavailable: {e}")
+            self._broadcast_log("Usage evidence unavailable; recommendations shown without measured data.")
+            return {}
+
+    @staticmethod
+    def _mock_usage_map(raw: Dict[str, Any], p: Dict[str, Any]) -> Dict[str, Any]:
+        """Deterministic plausible usage evidence for mock scans (dev/test only)."""
+        cpu_p = p.get("cpu_percentile", 95.0)
+        pctl_key = f"p{cpu_p:g}"
+        mem_buf = 1 + p.get("memory_buffer_percentage", 15) / 100
+        usage: Dict[str, Any] = {}
+        for s in raw.get("scans") or []:
+            if not isinstance(s, dict):
+                continue
+            o = s.get("object") or {}
+            rec = s.get("recommended") or {}
+            req = rec.get("requests") or {}
+            rec_cpu = req.get("cpu", {}).get("value") if isinstance(req.get("cpu"), dict) else None
+            rec_mem = req.get("memory", {}).get("value") if isinstance(req.get("memory"), dict) else None
+            key = f"{o.get('namespace', 'default')}|{o.get('container', 'main')}"
+            entry: Dict[str, Any] = {}
+            if isinstance(rec_cpu, (int, float)) and not (isinstance(rec_cpu, float) and (math.isnan(rec_cpu) or math.isinf(rec_cpu))):
+                cpu = {"p50": rec_cpu * 0.5, "p90": rec_cpu * 0.8, "p95": rec_cpu * 0.95, "p99": rec_cpu * 0.99, "max": rec_cpu}
+                cpu[pctl_key] = rec_cpu
+                entry["cpu"] = {k: round(v, 6) for k, v in cpu.items() if not (isinstance(v, float) and (math.isnan(v) or math.isinf(v)))}
+            if isinstance(rec_mem, (int, float)) and not (isinstance(rec_mem, float) and (math.isnan(rec_mem) or math.isinf(rec_mem))):
+                mem_max = rec_mem / mem_buf
+                mem = {"p50": mem_max * 0.6, "p90": mem_max * 0.85, "p95": mem_max * 0.95, "p99": mem_max * 0.99, "max": mem_max}
+                entry["memory"] = {k: round(v, 6) for k, v in mem.items() if not (isinstance(v, float) and (math.isnan(v) or math.isinf(v)))}
+            if entry:
+                usage[key] = entry
+        return sanitize_for_json(usage)
 
     def _broadcast_log(self, line: str):
         if not self._loop:
@@ -304,7 +415,12 @@ class ScanEngine:
             with open(out_raw, "r", encoding="utf-8") as f:
                 raw_json = json.load(f)
 
-            result = self.slim(raw_json)
+            if use_mock:
+                usage_map = self._mock_usage_map(raw_json, p)
+            else:
+                usage_map = self._fetch_usage_evidence(p)
+
+            result = self.slim(raw_json, usage_map=usage_map)
             meta.update(
                 status="done",
                 containers=len(result["rows"]),
@@ -335,8 +451,11 @@ class ScanEngine:
                     os.remove(out_raw)
                 except Exception:
                     pass
-            self._write_json(self.meta_path(sid), meta)
-            self.prune()
+            try:
+                self._write_json(self.meta_path(sid), meta)
+                self.prune()
+            except Exception:
+                pass
             with self._lock:
                 self.current_meta = None
 

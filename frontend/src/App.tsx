@@ -299,6 +299,7 @@ export const App: React.FC = () => {
       const detail = await fetchScanDetail(id);
       setActiveScan(detail);
       setCurrentTab('workloads');
+      setError(null);
     } catch (err: any) {
       setError(`Failed to load scan ${id}: ${err.message}`);
     } finally {
@@ -475,7 +476,7 @@ export const App: React.FC = () => {
           )}
 
           {/* Empty State when scans exist but none is currently selected */}
-          {!loading && !activeScan && scans.length > 0 && !isScanning && (
+          {!loading && !activeScan && scans.length > 0 && !isScanning && (currentTab === 'overview' || currentTab === 'workloads' || currentTab === 'namespaces') && (
             <div className="soft-card p-8 sm:p-12 text-center max-w-xl mx-auto mt-8 space-y-4 animate-fade-in">
               <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mx-auto shadow-sm">
                 <AlertCircle className="w-6 h-6 text-amber-600" />
@@ -558,6 +559,7 @@ export const App: React.FC = () => {
                 selectedCategory={tableCategoryFilter}
                 savingsOnly={tableSavingsOnly}
                 drift={driftMap}
+                scanParams={activeScan.params}
                 onSelectNamespace={setTableNamespaceFilter}
                 onClearFilters={() => {
                   setGlobalSearch('');

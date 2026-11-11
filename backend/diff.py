@@ -1,5 +1,6 @@
 """Cross-scan diff computation for kube-rightsizer."""
 import logging
+import math
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("kube-rightsizer.diff")
@@ -9,8 +10,64 @@ EPS = 1e-9
 ALLOCATION_KEYS = ("req_cpu", "req_mem", "lim_cpu", "lim_mem")
 
 
+def parse_quantity(val: Any) -> Optional[float]:
+    """Parse numeric values or Kubernetes quantity strings ('100m', '256Mi', etc.) into float."""
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        if math.isnan(val) or math.isinf(val):
+            return None
+        return float(val)
+    if not isinstance(val, str):
+        return None
+    s = val.strip()
+    if not s or s.lower() in ("unset", "?", "none", "null"):
+        return None
+    try:
+        f = float(s)
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return f
+    except ValueError:
+        pass
+    # Kubernetes suffixes
+    units = {
+        "m": 1e-3,
+        "u": 1e-6,
+        "n": 1e-9,
+        "k": 1e3,
+        "M": 1e6,
+        "G": 1e9,
+        "T": 1e12,
+        "P": 1e15,
+        "E": 1e18,
+        "Ki": 1024.0,
+        "Mi": 1024.0**2,
+        "Gi": 1024.0**3,
+        "Ti": 1024.0**4,
+        "Pi": 1024.0**5,
+        "Ei": 1024.0**6,
+    }
+    for unit, mult in sorted(units.items(), key=lambda x: -len(x[0])):
+        if s.endswith(unit):
+            try:
+                num_part = float(s[:-len(unit)].strip())
+                return num_part * mult
+            except ValueError:
+                return None
+    return None
+
+
 def row_key(row: Dict[str, Any]) -> str:
     return f"{row.get('ns')}/{row.get('kind')}/{row.get('name')}/{row.get('container')}"
+
+
+def _is_unset(v: Any) -> bool:
+    if v is None:
+        return True
+    if isinstance(v, str) and v.strip().lower() in ("", "unset", "?", "none", "null"):
+        return True
+    return False
 
 
 def _allocations_changed(a: Optional[Dict[str, Any]], b: Optional[Dict[str, Any]]) -> bool:
@@ -18,10 +75,16 @@ def _allocations_changed(a: Optional[Dict[str, Any]], b: Optional[Dict[str, Any]
         return a != b
     for k in ALLOCATION_KEYS:
         va, vb = a.get(k), b.get(k)
-        fa = float(va) if isinstance(va, (int, float)) else None
-        fb = float(vb) if isinstance(vb, (int, float)) else None
+        if va == vb:
+            continue
+        if _is_unset(va) and _is_unset(vb):
+            continue
+        if _is_unset(va) != _is_unset(vb):
+            return True
+        fa = parse_quantity(va)
+        fb = parse_quantity(vb)
         if fa is None or fb is None:
-            if fa != fb:
+            if va != vb:
                 return True
         elif abs(fa - fb) > EPS:
             return True
@@ -29,7 +92,7 @@ def _allocations_changed(a: Optional[Dict[str, Any]], b: Optional[Dict[str, Any]
 
 
 def _num(v: Any) -> Optional[float]:
-    return float(v) if isinstance(v, (int, float)) else None
+    return parse_quantity(v)
 
 
 def _relative_gap(cur: Any, rec: Any) -> Optional[float]:
@@ -39,13 +102,16 @@ def _relative_gap(cur: Any, rec: Any) -> Optional[float]:
     return abs(c - r) / max(abs(r), EPS)
 
 
-def _moved_toward_recommended(cur_before: Dict[str, Any], cur_after: Dict[str, Any], rec: Any) -> bool:
+def _moved_toward_recommended(cur_before: Any, cur_after: Any, rec: Any) -> bool:
     """True when current allocations changed and the relative gap to the
     recommendation shrank across the comparable CPU/memory dimensions."""
+    cur_b = cur_before if isinstance(cur_before, dict) else {}
+    cur_a = cur_after if isinstance(cur_after, dict) else {}
+    rec_d = rec if isinstance(rec, dict) else {}
     before_sum, after_sum = 0.0, 0.0
     for k in ALLOCATION_KEYS:
-        g_before = _relative_gap(cur_before.get(k), rec.get(k) if isinstance(rec, dict) else None)
-        g_after = _relative_gap(cur_after.get(k), rec.get(k) if isinstance(rec, dict) else None)
+        g_before = _relative_gap(cur_b.get(k), rec_d.get(k))
+        g_after = _relative_gap(cur_a.get(k), rec_d.get(k))
         if g_before is not None and g_after is not None:
             before_sum += g_before
             after_sum += g_after
