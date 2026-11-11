@@ -107,3 +107,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Helm chart packaging output (build-and-push.sh)
+.chart-release/

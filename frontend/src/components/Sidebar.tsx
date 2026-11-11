@@ -10,7 +10,8 @@ import {
   Activity,
   CheckCircle2,
   AlertCircle,
-  Server
+  Server,
+  TrendingUp
 } from 'lucide-react';
 import { ViewTab, ClusterStatus } from '../types';
 
@@ -70,6 +71,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         activeNamespaceCount !== undefined && activeNamespaceCount > 0
           ? `${namespaceCount} Cluster Namespaces (${activeNamespaceCount} with analyzed workloads)`
           : `${namespaceCount} cluster namespaces`,
+    },
+    {
+      id: 'trends' as ViewTab,
+      label: 'Trends',
+      icon: TrendingUp,
+      badge: scanCount >= 2 ? `${scanCount}` : null,
+      tooltip: 'Cross-scan trends and drift detection',
     },
     {
       id: 'history' as ViewTab,

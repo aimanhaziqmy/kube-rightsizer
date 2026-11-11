@@ -1,4 +1,5 @@
 import { ClusterStatus, ScanDetail, ScanMeta, ScanParams } from './types';
+import { ScanDiff, TrendsScan, HistoryPoint } from './utils/scanDiff';
 
 async function handleResponse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -30,6 +31,22 @@ export async function fetchScans(): Promise<ScanMeta[]> {
 
 export async function fetchScanDetail(id: string): Promise<ScanDetail> {
   const res = await fetch(`/api/scans/${encodeURIComponent(id)}`);
+  return handleResponse(res);
+}
+
+export async function fetchTrends(): Promise<{ scans: TrendsScan[] }> {
+  const res = await fetch('/api/scans/trends');
+  return handleResponse(res);
+}
+
+export async function fetchScanDiff(scanId: string, compareTo?: string): Promise<ScanDiff> {
+  const qs = compareTo ? `?compare_to=${encodeURIComponent(compareTo)}` : '';
+  const res = await fetch(`/api/scans/${encodeURIComponent(scanId)}/diff${qs}`);
+  return handleResponse(res);
+}
+
+export async function fetchWorkloadHistory(key: string): Promise<{ key: string; points: HistoryPoint[] }> {
+  const res = await fetch(`/api/scans/history?key=${encodeURIComponent(key)}`);
   return handleResponse(res);
 }
 

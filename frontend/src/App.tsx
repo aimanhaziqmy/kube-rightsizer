@@ -4,6 +4,8 @@ import {
   fetchNamespaces, 
   fetchScans, 
   fetchScanDetail, 
+  fetchTrends,
+  fetchScanDiff,
   deleteScan,
   triggerScan,
   subscribeLiveLogs
@@ -15,11 +17,13 @@ import {
   ViewTab,
   ScanParams
 } from './types';
+import { TrendsScan, ScanDiff, DiffChanges } from './utils/scanDiff';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { OverviewView } from './components/OverviewView';
 import { WorkloadsTable } from './components/WorkloadsTable';
 import { NamespacesView } from './components/NamespacesView';
+import { TrendsView } from './components/TrendsView';
 import { HistoryView } from './components/HistoryView';
 import { SettingsView } from './components/SettingsView';
 import { ScanModal } from './components/ScanModal';
@@ -45,6 +49,11 @@ export const App: React.FC = () => {
   const [scans, setScans] = useState<ScanMeta[]>([]);
   const [activeScan, setActiveScan] = useState<ScanDetail | null>(null);
 
+  // Cross-scan trends & diff state
+  const [trendsScans, setTrendsScans] = useState<TrendsScan[] | null>(null);
+  const [trendsLoading, setTrendsLoading] = useState(false);
+  const [scanDiff, setScanDiff] = useState<ScanDiff | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,7 +66,6 @@ export const App: React.FC = () => {
 
   // Toast Notifications State
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
   const addToast = useCallback((type: 'success' | 'error' | 'info', title: string, message: string) => {
     const newToast: ToastMessage = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -136,6 +144,7 @@ export const App: React.FC = () => {
 
       setScans(updatedScans);
       if (st) setClusterStatus(st);
+      setTrendsScans(null); // invalidate so the Trends tab refetches
 
       if (success && updatedScans.length > 0) {
         const latestDetail = await fetchScanDetail(updatedScans[0].id).catch(() => null);
@@ -210,6 +219,48 @@ export const App: React.FC = () => {
       if (timer) clearInterval(timer);
     };
   }, [isScanning, handleScanCompleted]);
+
+  // Cross-scan diff: recompute whenever the active scan changes (default baseline
+  // = previous completed scan, chosen by the backend). A 404 (e.g. only one scan
+  // exists yet) simply means no drift view is available.
+  const loadDiff = useCallback(async (targetId: string, baselineId?: string) => {
+    try {
+      const d = await fetchScanDiff(targetId, baselineId);
+      setScanDiff(d);
+    } catch {
+      setScanDiff(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeScan?.id) {
+      loadDiff(activeScan.id);
+    } else {
+      setScanDiff(null);
+    }
+  }, [activeScan?.id, loadDiff]);
+
+  // Trends: lazily loaded when the tab is first opened, invalidated on new scans
+  useEffect(() => {
+    if (currentTab === 'trends' && trendsScans === null && !trendsLoading && !isScanning) {
+      setTrendsLoading(true);
+      fetchTrends()
+        .then((res) => setTrendsScans(res.scans))
+        .catch(() => {
+          console.error('Failed to load scan trends');
+          setTrendsScans([]);
+        })
+        .finally(() => setTrendsLoading(false));
+    }
+  }, [currentTab, trendsScans, trendsLoading, isScanning]);
+
+  // Drift flags for the Workloads table, keyed by workload identity
+  const driftMap = useMemo(() => {
+    if (!scanDiff || !activeScan || scanDiff.target.id !== activeScan.id) return undefined;
+    const m: Record<string, DiffChanges> = {};
+    for (const r of scanDiff.rows) m[r.key] = r.changes;
+    return m;
+  }, [scanDiff, activeScan]);
 
   // Trigger a scan immediately
   const handleTriggerScan = async (params: ScanParams) => {
@@ -303,7 +354,7 @@ export const App: React.FC = () => {
   }, [activeScan]);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col antialiased">
+    <div className="h-screen bg-slate-50 flex flex-col antialiased overflow-hidden">
       {/* Top Navbar */}
       <Navbar
         clusterStatus={clusterStatus}
@@ -506,6 +557,7 @@ export const App: React.FC = () => {
                 selectedSeverity={tableSeverityFilter}
                 selectedCategory={tableCategoryFilter}
                 savingsOnly={tableSavingsOnly}
+                drift={driftMap}
                 onSelectNamespace={setTableNamespaceFilter}
                 onClearFilters={() => {
                   setGlobalSearch('');
@@ -524,6 +576,20 @@ export const App: React.FC = () => {
               rows={activeScan?.rows || []}
               clusterNamespaces={namespaces}
               onSelectNamespace={handleSelectNamespaceFromSummary}
+            />
+          )}
+
+          {/* TAB 3.5: TRENDS PAGE (Cross-Scan Drift & History) */}
+          {currentTab === 'trends' && (
+            <TrendsView
+              trends={trendsScans ?? []}
+              scanList={scans}
+              diff={scanDiff}
+              baselineId={scanDiff?.baseline.id ?? null}
+              targetId={scanDiff?.target.id ?? activeScan?.id ?? null}
+              onCompareChange={(baseline, target) => loadDiff(target, baseline)}
+              loading={trendsLoading}
+              onSelectScan={handleSelectScan}
             />
           )}
 

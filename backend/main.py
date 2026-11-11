@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from backend.diff import compute_diff
 from backend.engine import engine
 from backend.k8s import get_cluster_name, list_cluster_namespaces
 from backend.models import ClusterStatus, ScanDetail, ScanMeta, ScanParams
@@ -77,7 +78,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="kube-rightsizer",
-    version="1.0.6",
+    version="1.0.9",
     description="Kubernetes Resource Rightsizing Console",
     lifespan=lifespan,
     dependencies=[Depends(verify_basic_auth)],
@@ -137,6 +138,89 @@ def list_scans():
     return [ScanMeta(**m) for m in raw_metas]
 
 
+@app.get("/api/scans/trends")
+def get_trends():
+    """Trimmed rows for every completed scan, oldest first, for trend charts.
+
+    Rows keep only the fields the frontend math needs (identity, pods,
+    severity, current/recommended request CPU+memory) so the payload stays
+    small; limits, info and warnings are dropped.
+    """
+    scans = []
+    for meta in reversed(engine.list_metas()):  # oldest first
+        if meta.get("status") != "done":
+            continue
+        scan = engine.get_scan(meta["id"])
+        if not scan:
+            continue
+        trimmed = [
+            {
+                "ns": r.get("ns"),
+                "kind": r.get("kind"),
+                "name": r.get("name"),
+                "container": r.get("container"),
+                "pods": r.get("pods", 1),
+                "severity": r.get("severity"),
+                "cur": {
+                    "req_cpu": (r.get("cur") or {}).get("req_cpu"),
+                    "req_mem": (r.get("cur") or {}).get("req_mem"),
+                },
+                "rec": {
+                    "req_cpu": (r.get("rec") or {}).get("req_cpu"),
+                    "req_mem": (r.get("rec") or {}).get("req_mem"),
+                },
+            }
+            for r in (scan.get("rows") or [])
+            if isinstance(r, dict)
+        ]
+        scans.append({
+            "id": scan.get("id"),
+            "started": scan.get("started"),
+            "score": scan.get("score"),
+            "rows": trimmed,
+        })
+    return {"scans": scans}
+
+
+@app.get("/api/scans/history")
+def get_workload_history(key: str):
+    """Recommendation/current history for one workload (ns/kind/name/container),
+    oldest first, for sparklines in expandable rows."""
+    points = []
+    for meta in reversed(engine.list_metas()):  # oldest first
+        if meta.get("status") != "done":
+            continue
+        scan = engine.get_scan(meta["id"])
+        if not scan:
+            continue
+        for r in (scan.get("rows") or []):
+            if not isinstance(r, dict):
+                continue
+            from backend.diff import row_key
+
+            if row_key(r) != key:
+                continue
+            points.append({
+                "id": scan.get("id"),
+                "started": scan.get("started"),
+                "severity": r.get("severity"),
+                "cur": {
+                    "req_cpu": (r.get("cur") or {}).get("req_cpu"),
+                    "req_mem": (r.get("cur") or {}).get("req_mem"),
+                    "lim_cpu": (r.get("cur") or {}).get("lim_cpu"),
+                    "lim_mem": (r.get("cur") or {}).get("lim_mem"),
+                },
+                "rec": {
+                    "req_cpu": (r.get("rec") or {}).get("req_cpu"),
+                    "req_mem": (r.get("rec") or {}).get("req_mem"),
+                    "lim_cpu": (r.get("rec") or {}).get("lim_cpu"),
+                    "lim_mem": (r.get("rec") or {}).get("lim_mem"),
+                },
+            })
+            break
+    return {"key": key, "points": points}
+
+
 @app.get("/api/scans/{scan_id}")
 def get_scan(scan_id: str):
     scan = engine.get_scan(scan_id)
@@ -151,6 +235,28 @@ def delete_scan(scan_id: str):
     if not success:
         raise HTTPException(status_code=404, detail="Scan not found or could not be deleted")
     return {"status": "deleted", "id": scan_id}
+
+
+@app.get("/api/scans/{scan_id}/diff")
+def diff_scan(scan_id: str, compare_to: Optional[str] = None):
+    target = engine.get_scan(scan_id)
+    if not target or target.get("status") != "done":
+        raise HTTPException(status_code=404, detail="Scan not found")
+    if compare_to:
+        baseline = engine.get_scan(compare_to)
+    else:
+        baseline = None
+        for meta in engine.list_metas():
+            if meta.get("status") != "done" or meta.get("started", 0) >= target.get("started", 0):
+                continue
+            baseline = engine.get_scan(meta["id"])
+            break  # metas are sorted newest-first, so first hit = next-older done scan
+    if not baseline or baseline.get("status") != "done":
+        raise HTTPException(
+            status_code=404,
+            detail="No earlier scan available to compare against",
+        )
+    return compute_diff(baseline, target)
 
 
 @app.get("/api/scan/live")

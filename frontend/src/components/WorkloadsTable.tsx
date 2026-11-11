@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Search, 
   ChevronDown, 
@@ -18,6 +18,10 @@ import { WorkloadRow, StatusFilter, SortKey, SortDirection } from '../types';
 import { formatCpu, formatMem } from '../utils/formatters';
 import { calculateDelta, generateResourceYaml } from '../utils/krrCalculations';
 import { exportToCsv, exportToJson } from '../utils/exportUtils';
+import { DriftBadge } from './DriftBadge';
+import { Sparkline } from './Sparkline';
+import { fetchWorkloadHistory } from '../api';
+import { DiffChanges, HistoryPoint } from '../utils/scanDiff';
 
 interface WorkloadsTableProps {
   rows: WorkloadRow[];
@@ -29,6 +33,8 @@ interface WorkloadsTableProps {
   savingsOnly?: boolean;
   onSelectNamespace?: (ns: string) => void;
   onClearFilters?: () => void;
+  /** Drift flags per workload key, from the cross-scan diff (optional). */
+  drift?: Record<string, DiffChanges>;
 }
 
 export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
@@ -41,6 +47,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
   savingsOnly = false,
   onSelectNamespace,
   onClearFilters,
+  drift,
 }) => {
   // Local filter states
   const [tableSearch, setTableSearch] = useState(globalSearch || '');
@@ -71,6 +78,24 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
 
   // Expanded rows
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  // Lazy-loaded recommendation history per workload key (for sparklines)
+  const [history, setHistory] = useState<Record<string, HistoryPoint[] | null>>({});
+  const historyInFlight = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    for (const key of expandedRows) {
+      if (key in history || historyInFlight.current.has(key)) continue;
+      historyInFlight.current.add(key);
+      fetchWorkloadHistory(key)
+        .then((res) => setHistory((prev) => ({ ...prev, [key]: res.points })))
+        .catch(() => setHistory((prev) => ({ ...prev, [key]: null })))
+        .finally(() => {
+          historyInFlight.current.delete(key);
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedRows]);
 
   // Copied row state for feedback
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -603,12 +628,15 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
               {renderSortHeader('CPU Δ', 'dcpu')}
               {renderSortHeader('MEM Δ', 'dmem')}
               {renderSortHeader('SEVERITY', 'severity')}
+              <th className="py-2 px-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                DRIFT
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {paginatedRows.length === 0 ? (
               <tr>
-                <td colSpan={11} className="text-center py-14 text-slate-500">
+                <td colSpan={12} className="text-center py-14 text-slate-500">
                   <div className="flex flex-col items-center justify-center space-y-2">
                     <Info className="w-6 h-6 text-slate-400" />
                     {filterNs !== 'ALL' && emptyClusterNamespaces.includes(filterNs) ? (
@@ -728,13 +756,18 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                       <td className="py-2 px-1.5 align-middle whitespace-nowrap">
                         {renderSeverityBadge(r.severity)}
                       </td>
+
+                      {/* 12. Drift vs previous scan */}
+                      <td className="py-2 px-1.5 align-middle whitespace-nowrap">
+                        {drift && drift[key] && <DriftBadge changes={drift[key]} />}
+                      </td>
                     </tr>
 
                     {/* Expandable Details Row matching Image 1 (Low-profile 3-column layout) */}
                     {isExpanded && (
                       <tr className="bg-slate-50/70 border-b border-slate-200">
-                        <td colSpan={11} className="py-2.5 px-3 sm:px-4">
-                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5 xl:gap-5 items-start w-full text-left">
+                        <td colSpan={12} className="py-2.5 px-3 sm:px-4">
+                          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-3.5 xl:gap-5 items-start w-full text-left">
                             {/* Column 1: CURRENT VS RECOMMENDED (PER POD) */}
                             <div className="min-w-0">
                               <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
@@ -860,6 +893,40 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = ({
                                   <p className="text-xs text-slate-500 py-1">No warnings for this container.</p>
                                 )}
                               </div>
+                            </div>
+
+                            {/* Column 4: TREND (recommendation history across scans) */}
+                            <div className="min-w-0">
+                              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                RECOMMENDATION TREND
+                              </div>
+                              {history[key] === null ? (
+                                <p className="text-xs text-slate-500 italic">History unavailable.</p>
+                              ) : !history[key] ? (
+                                <p className="text-xs text-slate-400 italic">Loading history…</p>
+                              ) : (
+                                <div className="bg-white rounded-lg border border-slate-200/90 p-2.5 shadow-2xs space-y-2">
+                                  <div>
+                                    <div className="text-[10px] font-semibold text-slate-500 mb-0.5">Recommended CPU</div>
+                                    <Sparkline
+                                      values={history[key]!.map((p) => (typeof p.rec.req_cpu === 'number' ? p.rec.req_cpu : null))}
+                                      started={history[key]!.map((p) => p.started)}
+                                      format={(v) => formatCpu(v)}
+                                    />
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] font-semibold text-slate-500 mb-0.5">Recommended memory</div>
+                                    <Sparkline
+                                      values={history[key]!.map((p) => (typeof p.rec.req_mem === 'number' ? p.rec.req_mem : null))}
+                                      started={history[key]!.map((p) => p.started)}
+                                      format={(v) => formatMem(v)}
+                                    />
+                                  </div>
+                                  <p className="text-[10px] text-slate-400">
+                                    Across {history[key]!.length} scan{history[key]!.length === 1 ? '' : 's'}.
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>

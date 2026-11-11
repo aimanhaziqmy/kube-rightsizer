@@ -53,7 +53,7 @@ export interface ClusterStatus {
   total_scans?: number;
 }
 
-export type ViewTab = 'overview' | 'workloads' | 'namespaces' | 'history' | 'settings';
+export type ViewTab = 'overview' | 'workloads' | 'namespaces' | 'trends' | 'history' | 'settings';
 
 export type StatusFilter = 'ALL' | 'CRITICAL' | 'WARNING' | 'OK' | 'UNKNOWN';
 
