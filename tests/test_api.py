@@ -85,6 +85,12 @@ def test_trigger_scan_and_get_results(client):
     assert detail["status"] == "done"
     assert len(detail["rows"]) > 0
 
+    # Capacity snapshot is collected and persisted with the scan.
+    assert "capacity" in detail
+    assert detail["capacity"]["cpu"]["allocatable"] > 0
+    assert detail["capacity"]["memory"]["allocatable"] > 0
+    assert detail["capacity"]["cpu"]["requests"] is not None
+
     first_row = detail["rows"][0]
     assert "ns" in first_row
     assert "cur" in first_row

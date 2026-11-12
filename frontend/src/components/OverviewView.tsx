@@ -13,8 +13,9 @@ import {
   ExternalLink,
   ChevronRight
 } from 'lucide-react';
-import { WorkloadRow } from '../types';
+import { ClusterCapacity, ScanMeta, WorkloadRow } from '../types';
 import { OverviewCards } from './OverviewCards';
+import { CapacityGauges } from './CapacityGauges';
 import { 
   computeStatusDistribution, 
   getTopSavingsOpportunities, 
@@ -27,6 +28,8 @@ interface OverviewViewProps {
   rows: WorkloadRow[];
   score?: number | null;
   namespaces: string[];
+  capacity?: ClusterCapacity | null;
+  scan?: ScanMeta | null;
   isScanning?: boolean;
   scanElapsed?: number;
   onNavigateToWorkloads: (filters?: {
@@ -43,6 +46,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   rows,
   score,
   namespaces,
+  capacity,
+  scan,
   isScanning,
   scanElapsed = 0,
   onNavigateToWorkloads,
@@ -61,6 +66,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* 0. Cluster capacity snapshot (latest/selected scan) */}
+      <CapacityGauges capacity={capacity} scan={scan} />
+
       {/* 1. Top Executive KPI Stat Cards */}
       <OverviewCards rows={rows} score={score} clusterNamespaceCount={namespaces.length} />
 

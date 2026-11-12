@@ -313,6 +313,51 @@ class ScanEngine:
                 usage[key] = entry
         return sanitize_for_json(usage)
 
+    @staticmethod
+    def _mock_capacity_snapshot(raw: Dict[str, Any], p: Dict[str, Any]) -> Dict[str, Any]:
+        """Deterministic cluster capacity snapshot for mock scans (dev/test only)."""
+        cpu_req = cpu_lim = mem_req = mem_lim = 0.0
+        for s in raw.get("scans") or []:
+            if not isinstance(s, dict):
+                continue
+            o = s.get("object") or {}
+            pods = o.get("pods")
+            if not isinstance(pods, list):
+                pods = []
+            count = sum(1 for pod in pods if isinstance(pod, dict) and not pod.get("deleted", False)) or 1
+            alloc = o.get("allocations") or {}
+            req = alloc.get("requests") or {}
+            lim = alloc.get("limits") or {}
+
+            def num(d: Any, key: str) -> float:
+                value = d.get(key) if isinstance(d, dict) else None
+                return float(value) if isinstance(value, (int, float)) else 0.0
+
+            cpu_req += num(req, "cpu") * count
+            mem_req += num(req, "memory") * count
+            cpu_lim += num(lim, "cpu") * count
+            mem_lim += num(lim, "memory") * count
+
+        cpu_alloc = cpu_req / 0.9 if cpu_req > 0 else 4.0
+        mem_alloc = mem_req / 0.78 if mem_req > 0 else 8 * 1024 ** 3
+        return sanitize_for_json({
+            "collected_at": time.time(),
+            "lookback_hours": p["history_days"] * 24,
+            "cpu": {
+                "allocatable": round(cpu_alloc, 6),
+                "usage_avg": round(cpu_alloc * 0.08, 6),
+                "requests": round(cpu_req, 6),
+                "limits": round(cpu_lim, 6),
+            },
+            "memory": {
+                "allocatable": round(mem_alloc, 6),
+                "usage_avg": round(mem_alloc * 0.47, 6),
+                "requests": round(mem_req, 6),
+                "limits": round(mem_lim, 6),
+            },
+            "warnings": [],
+        })
+
     def _broadcast_log(self, line: str):
         if not self._loop:
             return
@@ -417,10 +462,19 @@ class ScanEngine:
 
             if use_mock:
                 usage_map = self._mock_usage_map(raw_json, p)
+                capacity = self._mock_capacity_snapshot(raw_json, p)
             else:
                 usage_map = self._fetch_usage_evidence(p)
+                try:
+                    from backend.capacity import collect_capacity_snapshot
+                    self._broadcast_log("Collecting cluster capacity snapshot...")
+                    capacity = collect_capacity_snapshot(PROM_URL, p["history_days"] * 24)
+                except Exception as e:
+                    logger.warning(f"Capacity snapshot unavailable: {e}")
+                    capacity = {}
 
             result = self.slim(raw_json, usage_map=usage_map)
+            result["capacity"] = capacity
             meta.update(
                 status="done",
                 containers=len(result["rows"]),
@@ -443,6 +497,7 @@ class ScanEngine:
                 "score": None,
                 "errors": [str(e)[:2000]],
                 "cluster": {},
+                "capacity": {},
             })
             self._broadcast_status("failed", error=str(e)[:500])
         finally:

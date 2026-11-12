@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="kube-rightsizer",
-    version="1.1.1",
+    version="1.1.3",
     description="Kubernetes Resource Rightsizing Console",
     lifespan=lifespan,
     dependencies=[Depends(verify_basic_auth)],

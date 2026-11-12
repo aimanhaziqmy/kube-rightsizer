@@ -56,6 +56,8 @@ class ScanDetail(ScanMeta):
     score: Optional[Union[float, int, str]] = None
     errors: Optional[List[Any]] = Field(default_factory=list)
     cluster: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    # Cluster-wide capacity snapshot collected at scan time (v1.1.2+).
+    capacity: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
 class ClusterStatus(BaseModel):

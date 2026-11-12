@@ -80,6 +80,30 @@ def list_cluster_namespaces() -> List[str]:
     return []
 
 
+def list_nodes():
+    """Return all nodes, or None when the Kubernetes API is unavailable."""
+    core = _init_core_api()
+    if core is None:
+        return None
+    try:
+        return core.list_node(_request_timeout=(3, 5)).items
+    except Exception as e:
+        logger.warning(f"Could not list nodes ({e})")
+        return None
+
+
+def list_all_pods():
+    """Return pods across all namespaces, or None when the API is unavailable."""
+    core = _init_core_api()
+    if core is None:
+        return None
+    try:
+        return core.list_pod_for_all_namespaces(_request_timeout=(5, 10)).items
+    except Exception as e:
+        logger.warning(f"Could not list pods across namespaces ({e})")
+        return None
+
+
 def get_cluster_name() -> str:
     """Return cluster name from env or default."""
     return os.environ.get("CLUSTER_NAME", "kubernetes-cluster")

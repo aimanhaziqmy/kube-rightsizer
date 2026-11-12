@@ -150,6 +150,15 @@ def test_concurrency_conflict(tmp_path):
         assert res2.status_code == 409
         assert "already running" in res2.json()["detail"]
 
+        # Let the first scan thread finish so it cannot leak into later tests.
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            if client.get("/api/status").json()["running"] is None:
+                break
+            time.sleep(0.2)
+        else:
+            raise AssertionError("scan thread did not finish within timeout")
+
 
 def test_basic_auth_protection(monkeypatch, tmp_path):
     monkeypatch.setenv("AUTH_USER", "admin")

@@ -261,3 +261,24 @@ def test_list_scans_and_diff_with_null_started_meta(client, tmp_path):
     diff_res = client.get(f"/api/scans/{sid_normal}/diff")
     # Should return 404 cleanly since no earlier done scan exists
     assert diff_res.status_code == 404
+
+
+def test_legacy_scan_without_capacity_defaults_to_empty(client):
+    """Scans created before v1.1.2 must still load and expose an empty capacity."""
+    sid = "20260101-000000-abcdef"
+    engine._write_json(engine.scan_path(sid), {
+        "id": sid,
+        "started": 1000.0,
+        "status": "done",
+        "params": {
+            "cpu_percentile": 95.0,
+            "memory_buffer_percentage": 15,
+            "history_days": 14,
+            "namespaces": [],
+        },
+        "rows": [],
+    })
+
+    res = client.get(f"/api/scans/{sid}")
+    assert res.status_code == 200
+    assert res.json()["capacity"] == {}

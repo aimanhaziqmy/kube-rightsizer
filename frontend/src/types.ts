@@ -51,11 +51,28 @@ export interface WorkloadRow {
   usage?: WorkloadUsage | null;
 }
 
+export interface CapacityResource {
+  allocatable: number | null;
+  usage_avg: number | null;
+  requests: number | null;
+  limits: number | null;
+}
+
+export interface ClusterCapacity {
+  collected_at?: number;
+  lookback_hours?: number;
+  cpu?: CapacityResource;
+  memory?: CapacityResource;
+  warnings?: string[];
+}
+
 export interface ScanDetail extends ScanMeta {
   rows: WorkloadRow[];
   score?: number;
   errors?: any[];
   cluster?: Record<string, any>;
+  /** Cluster-wide capacity snapshot; absent for scans created before v1.1.2. */
+  capacity?: ClusterCapacity | null;
 }
 
 export interface ClusterStatus {

@@ -61,8 +61,64 @@ def _query(prom_url: str, promql: str) -> Dict[Tuple[str, str], float]:
     return out
 
 
+def _query_scalar(prom_url: str, promql: str) -> Optional[float]:
+    """Run an instant query expected to return a single scalar value."""
+    resp = requests.get(
+        f"{prom_url.rstrip('/')}/api/v1/query",
+        params={"query": promql},
+        timeout=QUERY_TIMEOUT,
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    if body.get("status") != "success":
+        raise RuntimeError(f"Prometheus query failed: {str(body.get('error'))[:300]}")
+
+    result = body.get("data", {}).get("result", [])
+    if not result:
+        return None
+    try:
+        value = float(result[0]["value"][1])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    if math.isnan(value) or math.isinf(value):
+        return None
+    return value
+
+
 def _range_subquery(lookback_hours: float) -> str:
     return f"[{int(lookback_hours)}h:{STEP}]"
+
+
+def fetch_cluster_usage(
+    prom_url: str,
+    lookback_hours: float,
+) -> Dict[str, Optional[float]]:
+    """Return cluster-wide average CPU (cores) and memory (bytes) usage.
+
+    Usage is averaged over the scan's lookback window, matching the
+    "average usage" shown on the Overview capacity gauges.
+    """
+    usage: Dict[str, Optional[float]] = {"cpu": None, "memory": None}
+    if not prom_url:
+        return usage
+
+    rng = _range_subquery(lookback_hours)
+    cpu_query = (
+        f"sum(avg_over_time(rate({CPU_METRIC}{CONTAINER_SELECTOR}[{STEP}]){rng}))"
+    )
+    mem_query = f"sum(avg_over_time({MEM_METRIC}{CONTAINER_SELECTOR}{rng}))"
+
+    try:
+        usage["cpu"] = _query_scalar(prom_url, cpu_query)
+    except Exception as e:
+        logger.warning(f"Cluster CPU usage query failed: {e}")
+
+    try:
+        usage["memory"] = _query_scalar(prom_url, mem_query)
+    except Exception as e:
+        logger.warning(f"Cluster memory usage query failed: {e}")
+
+    return usage
 
 
 def fetch_container_usage(

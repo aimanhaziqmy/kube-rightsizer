@@ -79,7 +79,7 @@ The official Helm chart is packaged as an OCI artifact directly on Docker Hub. N
 
 ```bash
 helm install kube-rightsizer oci://registry-1.docker.io/scriptertech/kube-rightsizer \
-  --version 1.1.1 \
+  --version 1.1.3 \
   --namespace kube-rightsizer \
   --create-namespace \
   --set config.prometheusUrl="http://kube-prometheus-kube-prome-prometheus.monitoring.svc:9090"
@@ -126,7 +126,7 @@ Apply and upgrade:
 
 ```bash
 helm upgrade --install kube-rightsizer oci://registry-1.docker.io/scriptertech/kube-rightsizer \
-  --version 1.1.1 \
+  --version 1.1.3 \
   --namespace kube-rightsizer \
   --create-namespace \
   -f values.yaml

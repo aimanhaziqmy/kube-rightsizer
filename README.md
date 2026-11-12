@@ -2,8 +2,8 @@
 
 > Open-Source Kubernetes Resource Rightsizing and Cost Optimization Console.
 
-[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-scriptertech%2Fkube--rightsizer%3Av1.1.1-blue.svg?logo=docker)](https://hub.docker.com/r/scriptertech/kube-rightsizer)
-[![Helm Chart](https://img.shields.io/badge/Helm%20Chart-v1.1.1-orange.svg?logo=helm)](./charts/kube-rightsizer)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-scriptertech%2Fkube--rightsizer%3Av1.1.3-blue.svg?logo=docker)](https://hub.docker.com/r/scriptertech/kube-rightsizer)
+[![Helm Chart](https://img.shields.io/badge/Helm%20Chart-v1.1.3-orange.svg?logo=helm)](./charts/kube-rightsizer)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Base: Robusta KRR](https://img.shields.io/badge/Engine-Robusta_KRR_v1.31-blueviolet.svg)](https://github.com/robusta-dev/krr)
 
@@ -16,6 +16,7 @@
 - **Soft & Modern Console UI**: Soft pastel status badges, responsive navigation sidebar, micro-metrics, and live terminal drawer.
 - **Side-by-Side Allocations & Diff**: Instant comparison between current container CPU/Memory requests & limits against recommended values.
 - **Dynamic Parameter Tuning**: Configure CPU usage percentiles (e.g. 95th), memory headroom buffers (+15%), and lookback duration (1–30 days) on the fly.
+- **Cluster Capacity Gauges**: Overview rings compare average usage over the scan lookback, current requests, and limits against node allocatable CPU and memory, captured with each scan.
 - **Auditable Recommendations ("Show Your Work")**: Every recommendation ships with measured evidence — a percentile strip (p50–max) captured straight from Prometheus, plus an auditable derivation line (CPU = p{N} of measured usage, memory = peak working set × buffer). HPA-managed CPU requests are visibly refused with a stated reason instead of guessed.
 - **Live SSE Streaming Terminal**: Server-Sent Events stream real-time logs directly from the scanning engine into the web UI.
 - **Namespace-Level Cost Breakdown**: Aggregated resource savings and container counts grouped by Kubernetes namespace.
@@ -79,7 +80,7 @@ Create a custom `my-values.yaml`:
 ```yaml
 image:
   repository: scriptertech/kube-rightsizer
-  tag: "v1.1.1"
+  tag: "v1.1.3"
   pullPolicy: IfNotPresent
 
 config:
@@ -146,7 +147,7 @@ helm uninstall kube-rightsizer -n kube-rightsizer
 | Parameter | Description | Default |
 |---|---|---|
 | `image.repository` | Image repository | `scriptertech/kube-rightsizer` |
-| `image.tag` | Image tag | `v1.1.1` |
+| `image.tag` | Image tag | `v1.1.3` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `replicaCount` | Replicas (uses Recreate strategy) | `1` |
 | `serviceAccount.create` | Create ServiceAccount | `true` |
@@ -178,7 +179,7 @@ You can run the official public image locally or on a bastion/jumpbox:
 
 ```bash
 # Pull the public image
-docker pull scriptertech/kube-rightsizer:v1.1.1
+docker pull scriptertech/kube-rightsizer:v1.1.3
 
 # Run container mounted to host kubeconfig
 docker run -d \
@@ -188,7 +189,7 @@ docker run -d \
   -e CLUSTER_NAME="my-cluster" \
   -v ~/.kube/config:/root/.kube/config:ro \
   -v kube-rightsizer-data:/data/scans \
-  scriptertech/kube-rightsizer:v1.1.1
+  scriptertech/kube-rightsizer:v1.1.3
 ```
 
 #### Docker Compose
@@ -198,7 +199,7 @@ version: '3.8'
 
 services:
   kube-rightsizer:
-    image: scriptertech/kube-rightsizer:v1.1.1
+    image: scriptertech/kube-rightsizer:v1.1.3
     container_name: kube-rightsizer
     restart: unless-stopped
     ports:
@@ -219,7 +220,7 @@ volumes:
 
 ### 3. Deploy via Kubernetes Manifests
 
-Pre-configured manifests pointing to `scriptertech/kube-rightsizer:v1.1.1` are in the [`deploy/`](./deploy) directory.
+Pre-configured manifests pointing to `scriptertech/kube-rightsizer:v1.1.3` are in the [`deploy/`](./deploy) directory.
 
 #### Quick Deploy (All-in-One)
 

@@ -540,6 +540,8 @@ export const App: React.FC = () => {
               rows={activeScan.rows || []}
               score={activeScan.score}
               namespaces={namespaces}
+              capacity={activeScan.capacity}
+              scan={activeScan}
               isScanning={isScanning}
               scanElapsed={scanElapsed}
               onNavigateToWorkloads={handleNavigateToWorkloads}
